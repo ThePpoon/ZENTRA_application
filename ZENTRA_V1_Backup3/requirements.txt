@@ -1,0 +1,29 @@
+# requirements.txt — ZENTRA System Dependencies
+# Install: pip install -r requirements.txt
+
+# ── Core ─────────────────────────────────────────────────────
+opencv-python>=4.9.0
+numpy>=1.24.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+pyyaml>=6.0
+
+# ── Roboflow Inference ───────────────────────────────────────
+# inference-sdk>=0.18.0   # Roboflow local inference server
+# inference>=0.18.0       # Alternative: cloud inference
+
+# ── AI / ML ──────────────────────────────────────────────────
+ultralytics>=8.1.0        # YOLOv8 training + inference
+mediapipe>=0.10.0         # Pose estimation (33 keypoints)
+
+# ── Training ─────────────────────────────────────────────────
+roboflow>=1.1.0           # Dataset download + upload
+torch>=2.1.0              # PyTorch (backend สำหรับ Ultralytics)
+torchvision>=0.16.0
+
+# ── Optional: TensorRT Export ────────────────────────────────
+# onnxruntime>=1.17.0
+# onnx>=1.15.0
+
+# ── Optional: MQTT (IoT Sensor) ──────────────────────────────
+# paho-mqtt>=1.6.1

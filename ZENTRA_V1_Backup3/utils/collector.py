@@ -1,0 +1,220 @@
+# utils/collector.py — ZENTRA Auto Data Collector for Training
+# เก็บ frame + annotation อัตโนมัติเมื่อเกิด event
+# รองรับ format: YOLO (.txt), COCO (.json), Roboflow upload
+
+from __future__ import annotations
+import cv2
+import json
+import time
+import threading
+import numpy as np
+from pathlib import Path
+from datetime import datetime
+from typing import Optional
+
+
+def _cfg():
+    import config as c
+    return c
+
+
+class DataCollector:
+    """
+    Auto-collect frames + YOLO-format annotations สำหรับ fine-tuning
+
+    โครงสร้าง:
+    data/collected/
+    ├── ppe_violations/
+    │   ├── 20260330_143012_frame0001.jpg
+    │   └── 20260330_143012_frame0001.txt  (YOLO format)
+    ├── zone_intrusions/
+    ├── fall_events/
+    └── normal/
+    """
+
+    def __init__(self):
+        self.cfg      = _cfg()
+        self.lock     = threading.Lock()
+        self._counts: dict[str, int] = {}   # category → count
+        self._frame_counter = 0
+        self._load_counts()
+
+    # ── Public API ────────────────────────────────────────────
+    def collect(
+        self,
+        frame: np.ndarray,
+        predictions: list[dict],
+        category: str = "normal",
+        force: bool   = False,
+    ) -> bool:
+        """
+        บันทึก frame + annotation
+
+        Parameters
+        ----------
+        frame       : BGR numpy array
+        predictions : list of Roboflow prediction dicts
+        category    : 'ppe_violations' | 'zone_intrusions' | 'fall_events' | 'normal'
+        force       : True = บันทึกทันที, False = ตรวจ quota ก่อน
+        """
+        if not self.cfg.AUTO_COLLECT_FRAMES:
+            return False
+
+        # Check quota
+        max_q = self.cfg.COLLECT_MAX_PER_CLASS
+        with self.lock:
+            cnt = self._counts.get(category, 0)
+            if not force and cnt >= max_q:
+                return False
+            self._counts[category] = cnt + 1
+
+        save_dir = Path(self.cfg.COLLECTED_DIR) / category
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+        stem = f"{ts}_f{self._frame_counter:06d}"
+        img_path = save_dir / f"{stem}.jpg"
+        lbl_path = save_dir / f"{stem}.txt"
+
+        # Save image
+        cv2.imwrite(
+            str(img_path),
+            frame,
+            [cv2.IMWRITE_JPEG_QUALITY, self.cfg.COLLECT_JPEG_QUALITY],
+        )
+
+        # Save YOLO annotation
+        h, w = frame.shape[:2]
+        yolo_lines = self._to_yolo(predictions, w, h)
+        lbl_path.write_text("\n".join(yolo_lines))
+
+        self._frame_counter += 1
+        return True
+
+    def collect_normal(self, frame: np.ndarray, predictions: list[dict], frame_id: int):
+        """เก็บ normal frame ทุก N frames"""
+        if frame_id % self.cfg.COLLECT_NORMAL_INTERVAL == 0:
+            self.collect(frame, predictions, "normal")
+
+    def get_stats(self) -> dict:
+        with self.lock:
+            return dict(self._counts)
+
+    def export_dataset_yaml(self, output_path: str | None = None) -> str:
+        """สร้าง dataset.yaml สำหรับ YOLOv8 training"""
+        cfg    = self.cfg
+        base   = Path(cfg.COLLECTED_DIR)
+        yaml_p = Path(output_path or cfg.DATA_DIR / "dataset.yaml")
+
+        # รวม class names จาก PPE_CLASSES
+        class_names = sorted({
+            v["label"] for v in cfg.PPE_CLASSES.values()
+        })
+
+        content = f"""# ZENTRA Auto-Collected Dataset
+path: {base.resolve()}
+train: .
+val: .
+
+nc: {len(class_names)}
+names: {class_names}
+"""
+        yaml_p.write_text(content)
+        print(f"[Collector] dataset.yaml → {yaml_p}")
+        return str(yaml_p)
+
+    def export_coco_json(self, category: str = "ppe_violations") -> str:
+        """Export COCO format JSON (สำหรับ upload Roboflow)"""
+        cfg      = self.cfg
+        save_dir = Path(cfg.COLLECTED_DIR) / category
+        images, annotations, ann_id = [], [], 1
+
+        # Build class_id map
+        class_names = sorted({v["label"] for v in cfg.PPE_CLASSES.values()})
+        cls_map     = {n: i for i, n in enumerate(class_names)}
+        categories  = [{"id": i, "name": n} for i, n in enumerate(class_names)]
+
+        for img_id, img_path in enumerate(sorted(save_dir.glob("*.jpg"))):
+            lbl_path = img_path.with_suffix(".txt")
+            if not lbl_path.exists():
+                continue
+
+            img    = cv2.imread(str(img_path))
+            if img is None:
+                continue
+            h, w   = img.shape[:2]
+
+            images.append({
+                "id": img_id,
+                "file_name": img_path.name,
+                "width": w, "height": h,
+            })
+
+            for line in lbl_path.read_text().splitlines():
+                parts = line.strip().split()
+                if len(parts) < 5:
+                    continue
+                cls_id = int(parts[0])
+                cx, cy, bw, bh = map(float, parts[1:5])
+                x1 = (cx - bw / 2) * w
+                y1 = (cy - bh / 2) * h
+                bw_abs = bw * w
+                bh_abs = bh * h
+                annotations.append({
+                    "id": ann_id,
+                    "image_id": img_id,
+                    "category_id": cls_id,
+                    "bbox": [x1, y1, bw_abs, bh_abs],
+                    "area": bw_abs * bh_abs,
+                    "iscrowd": 0,
+                })
+                ann_id += 1
+
+        out = {
+            "images": images,
+            "annotations": annotations,
+            "categories": categories,
+        }
+        out_path = Path(cfg.COLLECTED_DIR) / f"{category}_coco.json"
+        out_path.write_text(json.dumps(out, indent=2))
+        print(f"[Collector] COCO JSON → {out_path} ({len(images)} imgs, {len(annotations)} anns)")
+        return str(out_path)
+
+    # ── Private ───────────────────────────────────────────────
+    def _to_yolo(self, predictions: list[dict], img_w: int, img_h: int) -> list[str]:
+        """แปลง Roboflow predictions → YOLO format lines"""
+        cfg        = _cfg()
+        class_names = sorted({v["label"] for v in cfg.PPE_CLASSES.values()})
+        cls_map     = {n: i for i, n in enumerate(class_names)}
+
+        lines = []
+        for pred in predictions:
+            cls_label = cfg.PPE_CLASSES.get(pred.get("class", ""), {}).get("label", "")
+            if cls_label not in cls_map:
+                continue
+            cls_id = cls_map[cls_label]
+            cx = pred.get("x", 0) / img_w
+            cy = pred.get("y", 0) / img_h
+            bw = pred.get("width",  0) / img_w
+            bh = pred.get("height", 0) / img_h
+            lines.append(f"{cls_id} {cx:.6f} {cy:.6f} {bw:.6f} {bh:.6f}")
+        return lines
+
+    def _load_counts(self):
+        """โหลด count จาก disk เพื่อไม่ให้ quota reset ทุกครั้ง"""
+        cfg = self.cfg
+        for cat in ["ppe_violations", "zone_intrusions", "fall_events", "normal"]:
+            d = Path(cfg.COLLECTED_DIR) / cat
+            if d.exists():
+                self._counts[cat] = len(list(d.glob("*.jpg")))
+
+
+# Singleton
+_collector_instance: Optional[DataCollector] = None
+
+
+def get_collector() -> DataCollector:
+    global _collector_instance
+    if _collector_instance is None:
+        _collector_instance = DataCollector()
+    return _collector_instance
