@@ -74,9 +74,9 @@ TestDeteckl/
 ├── docker-compose.yml   # Docker setup
 ├── .env.example         # Template สำหรับ API Keys
 ├── modules/
-│   ├── ppe.py           # Module 1: PPE Detection
-│   ├── safety_zone.py   # Module 2: Safety Zone
-│   └── heat_stroke.py   # Module 3: Heat Stroke
+│   ├── ppe.py           # Module 1: PPE Detection ✅
+│   ├── safety_zone.py   # Module 2: Safety Zone (กำลังพัฒนา)
+│   └── heat_stroke.py   # Module 3: Heat Stroke (กำลังพัฒนา)
 └── alerts/
     └── line_notify.py   # LINE Notification
 ```
