@@ -87,9 +87,10 @@ input, select, textarea { font-family: var(--font); }
   flex-shrink: 0;
 }
 .navbar-brand .brand-logo {
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   object-fit: contain;
+  filter: drop-shadow(0 0 4px rgba(126,207,255,0.3));
 }
 .navbar-brand .brand-text {
   font-size: 15px;
@@ -788,9 +789,10 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
   margin-bottom: 32px;
 }
 .splash-logo-img {
-  width: 80px;
-  height: 80px;
+  width: 110px;
+  height: 110px;
   object-fit: contain;
+  filter: drop-shadow(0 0 12px rgba(126,207,255,0.25));
 }
 .splash-logo-placeholder {
   width: 80px; height: 80px;
