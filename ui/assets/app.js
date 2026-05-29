@@ -22,12 +22,38 @@ const ZENTRA = {
   /* ── Router ─────────────────────────────────── */
   async navigate(screenId, params = {}) {
     try {
-      const res  = await fetch(`/ui/screens/${screenId}.html`);
-      const html = await res.text();
-      document.getElementById('app').innerHTML = html;
+      const res       = await fetch(`/ui/screens/${screenId}.html`);
+      const html      = await res.text();
+      const container = document.getElementById('app');
+      container.innerHTML = html;
       ZENTRA._currentScreen = screenId;
 
-      // Run the screen's init function if defined
+      // innerHTML does NOT auto-execute <script> tags — re-execute them
+      const scripts       = container.querySelectorAll('script');
+      const externalLoads = [];
+
+      for (const s of scripts) {
+        if (s.src) {
+          // Load external CDN scripts only once
+          if (!document.querySelector(`script[src="${s.src}"]`)) {
+            externalLoads.push(new Promise(resolve => {
+              const el    = document.createElement('script');
+              el.src      = s.src;
+              el.onload   = resolve;
+              el.onerror  = resolve;
+              document.head.appendChild(el);
+            }));
+          }
+        } else if (s.textContent.trim()) {
+          // Execute inline scripts immediately
+          try { eval(s.textContent); } catch (e) { console.error('[ZENTRA] inline script:', e); }
+        }
+      }
+
+      // Wait for any external scripts to finish loading
+      if (externalLoads.length) await Promise.all(externalLoads);
+
+      // Call the screen's init function
       const fn = window[`init_${screenId}`];
       if (typeof fn === 'function') fn(params);
     } catch (e) {

@@ -59,7 +59,7 @@ class JsApi:
 if __name__ == "__main__":
     server_thread = threading.Thread(target=start_server, daemon=True)
     server_thread.start()
-    time.sleep(1.0)
+    time.sleep(2.0)
 
     window = webview.create_window(
         title="ZENTRA Safety AI System",
