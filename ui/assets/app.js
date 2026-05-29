@@ -69,7 +69,7 @@ const ZENTRA = {
       if (msg.event === 'alert') {
         const lvl = msg.level || 'warning';
         ZENTRA.state.alerts.total++;
-        if (lvl === 'warning')   ZENTRA.state.alerts.warning++;
+        if (lvl === 'warning' || lvl === 'alert') ZENTRA.state.alerts.warning++;
         if (lvl === 'emergency') {
           ZENTRA.state.alerts.emergency++;
           ZENTRA.state.last_emergency = msg;

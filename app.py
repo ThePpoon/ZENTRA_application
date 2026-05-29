@@ -7,7 +7,14 @@ from pathlib import Path
 def start_server():
     import uvicorn
     from server.api import app as fastapi_app
-    uvicorn.run(fastapi_app, host="127.0.0.1", port=7788, log_level="warning")
+    uvicorn.run(
+        fastapi_app,
+        host="127.0.0.1",
+        port=7788,
+        log_level="warning",
+        # Suppress uvicorn shutdown errors on Windows
+        timeout_graceful_shutdown=2,
+    )
 
 
 class JsApi:
