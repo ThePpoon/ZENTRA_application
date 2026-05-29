@@ -36,27 +36,32 @@
 function init_splash() {
   const bar    = document.getElementById('splash-bar');
   const status = document.getElementById('splash-status');
-  const errBox = document.getElementById('splash-error');
 
-  const evtSrc = new EventSource('/api/init');
+  const steps = [
+    { pct: 15,  msg: 'กำลังโหลดการตั้งค่า...' },
+    { pct: 35,  msg: 'ตรวจสอบ Inference Server...' },
+    { pct: 55,  msg: 'เตรียม AI โมดูล...' },
+    { pct: 75,  msg: 'โหลดข้อมูลโซนความปลอดภัย...' },
+    { pct: 90,  msg: 'เริ่มต้นระบบ...' },
+    { pct: 100, msg: 'พร้อมใช้งาน' },
+  ];
 
-  evtSrc.onmessage = (e) => {
-    try {
-      const data = JSON.parse(e.data);
-      bar.style.width  = data.percent + '%';
-      status.textContent = data.message;
+  let i = 0;
 
-      if (data.percent >= 100) {
-        evtSrc.close();
-        setTimeout(() => ZENTRA.navigate('source'), 600);
-      }
-    } catch (_) {}
-  };
+  function tick() {
+    if (i >= steps.length) return;
+    const s = steps[i++];
+    bar.style.width    = s.pct + '%';
+    status.textContent = s.msg;
 
-  evtSrc.onerror = () => {
-    evtSrc.close();
-    errBox.style.display = 'block';
-    status.textContent   = 'ไม่สามารถเชื่อมต่อกับระบบได้';
-  };
+    if (s.pct >= 100) {
+      setTimeout(() => ZENTRA.navigate('source'), 600);
+      return;
+    }
+    setTimeout(tick, 480);
+  }
+
+  // Small initial delay so the window paints before the first step
+  setTimeout(tick, 200);
 }
 </script>

@@ -106,34 +106,39 @@ async def _startup():
 
     _loop = asyncio.get_running_loop()
 
-    # Import Pipeline after sys.path is set
-    from pipeline.pipeline        import Pipeline
-    from pipeline.frame_broadcaster import FrameBroadcaster
+    try:
+        # Import Pipeline (adds ZENTRA backend to sys.path, imports cv2/numpy)
+        from pipeline.pipeline          import Pipeline
+        from pipeline.frame_broadcaster import FrameBroadcaster
 
-    pipeline = Pipeline()
+        pipeline = Pipeline()
 
-    # Wire alert callback → WebSocket broadcast + history
-    def _on_alert(msg: str, level: str):
-        event = _add_event(msg, level)
-        ts    = event["time"]
-        broadcast_msg = {
-            "type":      "event",
-            "event":     "alert",
-            "level":     level,
-            "message":   event["message"],
-            "timestamp": ts,
-            "camera":    "Cam 1",
-        }
-        asyncio.run_coroutine_threadsafe(
-            manager.broadcast(broadcast_msg), _loop
-        )
+        # Wire alert callback → WebSocket broadcast + history
+        def _on_alert(msg: str, level: str):
+            event = _add_event(msg, level)
+            ts    = event["time"]
+            broadcast_msg = {
+                "type":      "event",
+                "event":     "alert",
+                "level":     level,
+                "message":   event["message"],
+                "timestamp": ts,
+                "camera":    "Cam 1",
+            }
+            asyncio.run_coroutine_threadsafe(
+                manager.broadcast(broadcast_msg), _loop
+            )
 
-    pipeline.on_alert = _on_alert
+        pipeline.on_alert = _on_alert
 
-    # Start frame broadcaster (frames → WebSocket at 10 fps)
-    _broadcaster = FrameBroadcaster(pipeline, manager, _loop, fps=10)
-    _broadcaster.start()
-    print("[API] Startup complete ✅")
+        # Start frame broadcaster (frames → WebSocket at 10 fps)
+        _broadcaster = FrameBroadcaster(pipeline, manager, _loop, fps=10)
+        _broadcaster.start()
+        print("[API] Startup complete ✅")
+
+    except Exception as e:
+        print(f"[API] ⚠️  Startup warning (pipeline not loaded): {e}")
+        print("[API] Server running in UI-only mode")
 
 
 @app.on_event("shutdown")
