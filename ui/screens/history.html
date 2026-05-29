@@ -1,0 +1,202 @@
+<div class="app-layout">
+  <div id="navbar-mount"></div>
+
+  <div class="history-layout">
+
+    <!-- Stat Cards -->
+    <div class="stat-cards" id="stat-cards">
+      <div class="stat-card">
+        <div class="stat-label">เหตุการณ์วันนี้</div>
+        <div><span class="stat-value" id="stat-total">—</span><span class="stat-unit">ครั้ง</span></div>
+      </div>
+      <div class="stat-card highlight-red">
+        <div class="stat-label">Emergency สะสม</div>
+        <div><span class="stat-value" id="stat-emergency">—</span><span class="stat-unit">ครั้ง</span></div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">PPE violations</div>
+        <div><span class="stat-value" id="stat-ppe">—</span><span class="stat-unit">ครั้ง</span></div>
+      </div>
+      <div class="stat-card highlight-green">
+        <div class="stat-label">เวลาดำเนินงาน</div>
+        <div class="stat-value" id="stat-uptime" style="font-size:22px">—</div>
+        <div class="stat-sub">ระบบทำงานต่อเนื่อง</div>
+      </div>
+    </div>
+
+    <!-- Body -->
+    <div class="history-body">
+
+      <!-- Left: charts -->
+      <div class="history-left">
+        <div class="chart-container">
+          <div class="chart-title">Alert รายชั่วโมง (วันนี้)</div>
+          <canvas id="hourly-chart" style="width:100%;max-height:160px;"></canvas>
+        </div>
+
+        <div class="category-bars" id="cat-bars">
+          <div class="cat-bar-row">
+            <span class="cat-bar-label">PPE</span>
+            <div class="cat-bar-track"><div class="cat-bar-fill ppe" id="bar-ppe" style="width:0%"></div></div>
+            <span class="cat-bar-count" id="cnt-ppe">—</span>
+          </div>
+          <div class="cat-bar-row">
+            <span class="cat-bar-label">Fall</span>
+            <div class="cat-bar-track"><div class="cat-bar-fill fall" id="bar-fall" style="width:0%"></div></div>
+            <span class="cat-bar-count" id="cnt-fall">—</span>
+          </div>
+          <div class="cat-bar-row">
+            <span class="cat-bar-label">Zone</span>
+            <div class="cat-bar-track"><div class="cat-bar-fill zone" id="bar-zone" style="width:0%"></div></div>
+            <span class="cat-bar-count" id="cnt-zone">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: events list -->
+      <div class="history-right">
+        <div class="event-list-header">บันทึกเหตุการณ์</div>
+        <div class="event-list" id="event-list"></div>
+        <div class="event-list-footer">
+          <button class="btn btn-ghost btn-sm" onclick="loadMoreEvents()" id="load-more-btn">
+            โหลดเพิ่มเติม
+          </button>
+          <button class="btn btn-outline btn-sm" onclick="exportCSV()" style="margin-left:auto">
+            Export CSV
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+let _eventsOffset = 0;
+let _chart = null;
+
+function init_history() {
+  document.getElementById('navbar-mount').innerHTML = renderNavbar('history');
+  loadTodayStats();
+  loadHourlyChart();
+  loadEvents();
+}
+
+async function loadTodayStats() {
+  try {
+    const res  = await fetch('/api/history/today');
+    const data = await res.json();
+    document.getElementById('stat-total').textContent    = data.total;
+    document.getElementById('stat-emergency').textContent= data.emergency;
+    document.getElementById('stat-ppe').textContent      = data.ppe_violations;
+    document.getElementById('stat-uptime').textContent   = fmtUptime(data.uptime_seconds);
+
+    const total = data.total || 1;
+    setBar('ppe',  data.ppe_violations, total);
+    setBar('fall', data.falls,          total);
+    setBar('zone', data.zone_intrusions,total);
+  } catch (_) {}
+}
+
+function setBar(type, count, total) {
+  const pct = Math.round(count / total * 100);
+  document.getElementById(`bar-${type}`).style.width = pct + '%';
+  document.getElementById(`cnt-${type}`).textContent = `${count} ครั้ง (${pct}%)`;
+}
+
+function fmtUptime(secs) {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  return `${h}h ${String(m).padStart(2,'0')}m`;
+}
+
+async function loadHourlyChart() {
+  try {
+    const res  = await fetch('/api/history/hourly');
+    const data = await res.json();
+    const labels = Object.keys(data).slice(6, 20); // show 06-19
+    const values = labels.map(h => data[h] || 0);
+
+    const ctx = document.getElementById('hourly-chart').getContext('2d');
+    if (_chart) _chart.destroy();
+    _chart = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          data: values,
+          backgroundColor: 'rgba(251, 146, 60, 0.7)',
+          borderColor: '#fb923c',
+          borderWidth: 1,
+          borderRadius: 3,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: {
+            ticks: { color: 'rgba(255,255,255,0.45)', font: { size: 10, family: 'Sarabun' } },
+            grid:  { color: 'rgba(255,255,255,0.05)' },
+          },
+          y: {
+            beginAtZero: true,
+            ticks: { color: 'rgba(255,255,255,0.45)', font: { size: 10, family: 'Sarabun' }, stepSize: 1 },
+            grid:  { color: 'rgba(255,255,255,0.05)' },
+          },
+        },
+      },
+    });
+  } catch (_) {}
+}
+
+async function loadEvents(append = false) {
+  try {
+    const res  = await fetch(`/api/history/events?limit=20&offset=${_eventsOffset}`);
+    const data = await res.json();
+    const list = document.getElementById('event-list');
+
+    if (!append) list.innerHTML = '';
+
+    for (const e of data.events) {
+      const div = document.createElement('div');
+      div.className = 'event-item';
+      div.innerHTML = `
+        <div class="event-type-row">
+          <span class="event-badge ${e.type}">${e.type.toUpperCase()}</span>
+          <span class="event-desc">${e.message}</span>
+        </div>
+        <div class="event-meta">
+          ${e.time} · ${e.camera}${e.track ? ' · ' + e.track : ''}
+          ${e.line_sent ? ' · <span style="color:var(--green);font-size:10px">LINE ส่งแล้ว</span>' : ''}
+        </div>`;
+      list.appendChild(div);
+    }
+
+    _eventsOffset += data.events.length;
+    document.getElementById('load-more-btn').style.display =
+      data.has_more ? 'inline-flex' : 'none';
+  } catch (_) {}
+}
+
+function loadMoreEvents() { loadEvents(true); }
+
+async function exportCSV() {
+  try {
+    const res = await fetch('/api/history/export.csv');
+    const csv = await res.text();
+    try {
+      await window.pywebview.api.save_file(csv, 'zentra_history.csv');
+    } catch (_) {
+      // Fallback: browser download
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const a    = document.createElement('a');
+      a.href     = URL.createObjectURL(blob);
+      a.download = 'zentra_history.csv';
+      a.click();
+    }
+  } catch (_) {}
+}
+</script>

@@ -1,0 +1,316 @@
+<div class="app-layout">
+  <div id="navbar-mount"></div>
+
+  <div class="app-body zone-editor-layout">
+    <!-- Canvas Area -->
+    <div class="zone-canvas-area" id="canvas-area">
+      <img id="zone-bg" src="" alt="Camera snapshot">
+      <canvas id="zone-canvas"></canvas>
+      <span class="camera-label">Camera #1</span>
+    </div>
+
+    <!-- Right Panel -->
+    <div class="zone-right-panel">
+      <div class="zone-right-inner">
+
+        <div class="panel-section-title">โซนความปลอดภัย</div>
+
+        <div id="zone-list"></div>
+
+        <button class="btn btn-dashed w-full" id="add-zone-btn" onclick="startNewZone()">
+          + เพิ่ม zone ใหม่
+        </button>
+
+        <!-- Zone detail editor -->
+        <div class="zone-detail-box" id="zone-detail" style="display:none">
+          <div class="zone-detail-title">คุณสมบัติ Zone</div>
+          <label class="input-label">ชื่อ Zone</label>
+          <input class="input mb-2" id="zone-name-input" type="text" placeholder="Zone A...">
+          <label class="input-label">สีแสดงผล</label>
+          <div class="color-palette" id="color-palette"></div>
+          <div class="flex justify-between items-center mt-2">
+            <span class="text-xs text-muted">จำนวนจุด: <span id="point-count">0</span>/20 จุด</span>
+          </div>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="btn btn-primary btn-sm" style="flex:1" onclick="saveZone()">บันทึก</button>
+            <button class="btn btn-ghost btn-sm" onclick="cancelZone()">ยกเลิก</button>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ─── Zone Editor State ─────────────────────────── */
+const ZE = {
+  zones:       [],          // loaded from API
+  drawing:     false,       // user is placing new zone points
+  currentPts:  [],          // points being drawn
+  selectedId:  null,        // currently editing zone id
+  selectedColor: '#ef4444', // default color
+  canvas: null,
+  ctx:    null,
+  bgW: 1, bgH: 1,           // natural dimensions of bg image
+  dispW: 1, dispH: 1,       // displayed dimensions
+  offsetX: 0, offsetY: 0,
+};
+
+const ZONE_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899'];
+
+/* ─── Init ─────────────────────────────────────── */
+function init_zone_editor() {
+  document.getElementById('navbar-mount').innerHTML = renderNavbar('zone_editor');
+
+  ZE.canvas = document.getElementById('zone-canvas');
+  ZE.ctx    = ZE.canvas.getContext('2d');
+
+  buildColorPalette();
+
+  // Load snapshot
+  const bg = document.getElementById('zone-bg');
+  bg.onload = () => {
+    ZE.bgW = bg.naturalWidth  || 960;
+    ZE.bgH = bg.naturalHeight || 540;
+    fitCanvas();
+    loadZones();
+  };
+  bg.onerror = () => {
+    ZE.bgW = 960; ZE.bgH = 540;
+    fitCanvas();
+    loadZones();
+  };
+  bg.src = '/api/frame/snapshot?' + Date.now();
+
+  ZE.canvas.addEventListener('mousedown', onCanvasDown);
+  ZE.canvas.addEventListener('dblclick',  onCanvasDbl);
+  window.addEventListener('resize', fitCanvas);
+}
+
+function fitCanvas() {
+  const area = document.getElementById('canvas-area');
+  const aw = area.clientWidth, ah = area.clientHeight;
+  const scale = Math.min(aw / ZE.bgW, ah / ZE.bgH);
+  ZE.dispW = ZE.bgW * scale;
+  ZE.dispH = ZE.bgH * scale;
+  ZE.offsetX = (aw - ZE.dispW) / 2;
+  ZE.offsetY = (ah - ZE.dispH) / 2;
+
+  const bg = document.getElementById('zone-bg');
+  bg.style.width  = ZE.dispW + 'px';
+  bg.style.height = ZE.dispH + 'px';
+  bg.style.position = 'absolute';
+  bg.style.left = ZE.offsetX + 'px';
+  bg.style.top  = ZE.offsetY + 'px';
+
+  ZE.canvas.width  = area.clientWidth;
+  ZE.canvas.height = area.clientHeight;
+  redraw();
+}
+
+/* ─── Coordinate helpers ───────────────────────── */
+function toDisplay(rx, ry) {
+  return { x: rx * (ZE.dispW / ZE.bgW) + ZE.offsetX,
+           y: ry * (ZE.dispH / ZE.bgH) + ZE.offsetY };
+}
+function toRaw(dx, dy) {
+  return { x: Math.round((dx - ZE.offsetX) * (ZE.bgW / ZE.dispW)),
+           y: Math.round((dy - ZE.offsetY) * (ZE.bgH / ZE.dispH)) };
+}
+function canvasPos(e) {
+  const r = ZE.canvas.getBoundingClientRect();
+  return { x: e.clientX - r.left, y: e.clientY - r.top };
+}
+
+/* ─── Draw ─────────────────────────────────────── */
+function redraw() {
+  const ctx = ZE.ctx;
+  ctx.clearRect(0, 0, ZE.canvas.width, ZE.canvas.height);
+
+  // Draw saved zones
+  for (const z of ZE.zones) {
+    if (z.points.length < 2) continue;
+    const pts = z.points.map(([rx,ry]) => toDisplay(rx, ry));
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.closePath();
+    ctx.fillStyle = (z.color || '#ef4444') + '33';
+    ctx.fill();
+    ctx.strokeStyle = z.color || '#ef4444';
+    ctx.lineWidth   = 2;
+    ctx.stroke();
+    // Vertex handles
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5, 0, Math.PI*2);
+      ctx.fillStyle = z.color || '#ef4444';
+      ctx.fill();
+    }
+    // Label
+    if (pts.length > 0) {
+      const cx = pts.reduce((s,p)=>s+p.x,0)/pts.length;
+      const cy = pts.reduce((s,p)=>s+p.y,0)/pts.length;
+      ctx.fillStyle = 'rgba(255,255,255,0.85)';
+      ctx.font = 'bold 12px Sarabun, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(z.name, cx, cy);
+    }
+  }
+
+  // Draw current in-progress zone
+  if (ZE.currentPts.length > 0) {
+    const pts = ZE.currentPts.map(([rx,ry]) => toDisplay(rx, ry));
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.strokeStyle = ZE.selectedColor;
+    ctx.lineWidth   = 2;
+    ctx.setLineDash([6, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    for (const p of pts) {
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, 5, 0, Math.PI*2);
+      ctx.fillStyle = ZE.selectedColor;
+      ctx.fill();
+    }
+  }
+
+  // Update point count
+  const pcEl = document.getElementById('point-count');
+  if (pcEl) pcEl.textContent = ZE.currentPts.length;
+}
+
+/* ─── Canvas events ────────────────────────────── */
+function onCanvasDown(e) {
+  if (!ZE.drawing) return;
+  const pos = canvasPos(e);
+  const raw = toRaw(pos.x, pos.y);
+  ZE.currentPts.push([raw.x, raw.y]);
+  redraw();
+}
+function onCanvasDbl(e) {
+  if (!ZE.drawing || ZE.currentPts.length < 3) return;
+  // Remove the duplicate point from dblclick
+  ZE.currentPts.pop();
+  saveZone();
+}
+
+/* ─── Zone CRUD ─────────────────────────────────── */
+async function loadZones() {
+  try {
+    const res = await fetch('/api/zones');
+    ZE.zones = await res.json();
+    renderZoneList();
+    redraw();
+  } catch (_) { ZE.zones = []; }
+}
+
+function startNewZone() {
+  ZE.drawing     = true;
+  ZE.currentPts  = [];
+  ZE.selectedId  = null;
+  ZE.canvas.style.cursor = 'crosshair';
+  document.getElementById('zone-detail').style.display = 'block';
+  document.getElementById('zone-name-input').value = `Zone ${ZE.zones.length + 1}`;
+  document.getElementById('zone-detail').scrollIntoView({behavior:'smooth'});
+}
+
+async function saveZone() {
+  if (ZE.currentPts.length < 3) {
+    alert('ต้องวางจุดอย่างน้อย 3 จุด เพื่อสร้างโซน');
+    return;
+  }
+  const name  = document.getElementById('zone-name-input').value.trim() || 'Zone';
+  const body  = { name, color: ZE.selectedColor, points: ZE.currentPts };
+
+  if (ZE.selectedId !== null) {
+    await fetch(`/api/zones/${ZE.selectedId}`, {
+      method: 'PUT', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+  } else {
+    await fetch('/api/zones', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(body),
+    });
+  }
+  ZE.drawing    = false;
+  ZE.currentPts = [];
+  ZE.canvas.style.cursor = 'default';
+  document.getElementById('zone-detail').style.display = 'none';
+  await loadZones();
+}
+
+function cancelZone() {
+  ZE.drawing    = false;
+  ZE.currentPts = [];
+  ZE.canvas.style.cursor = 'default';
+  document.getElementById('zone-detail').style.display = 'none';
+  redraw();
+}
+
+async function deleteZone(id) {
+  if (!confirm('ลบโซนนี้ออก?')) return;
+  await fetch(`/api/zones/${id}`, { method: 'DELETE' });
+  await loadZones();
+}
+
+function editZone(zone) {
+  ZE.selectedId    = zone.id;
+  ZE.selectedColor = zone.color || '#ef4444';
+  ZE.currentPts    = [...zone.points];
+  ZE.drawing       = true;
+  ZE.canvas.style.cursor = 'crosshair';
+  document.getElementById('zone-name-input').value = zone.name;
+  document.getElementById('zone-detail').style.display = 'block';
+  updateColorPalette(ZE.selectedColor);
+  // Remove zone from list so we can redraw
+  ZE.zones = ZE.zones.filter(z => z.id !== zone.id);
+  redraw();
+}
+
+/* ─── Zone List ─────────────────────────────────── */
+function renderZoneList() {
+  const container = document.getElementById('zone-list');
+  if (!ZE.zones.length) {
+    container.innerHTML = '<p class="text-xs text-muted" style="text-align:center;padding:8px 0">ยังไม่มีโซน</p>';
+    return;
+  }
+  container.innerHTML = ZE.zones.map(z => `
+    <div class="zone-list-item">
+      <div class="zone-color-swatch" style="background:${z.color || '#ef4444'}"></div>
+      <span class="zone-item-name">${z.name}</span>
+      <div class="zone-item-actions">
+        <button class="btn btn-ghost btn-sm" style="padding:3px 8px;font-size:11px"
+                onclick="editZone(${JSON.stringify(z).replace(/"/g,'&quot;')})">แก้ไข</button>
+        <button class="btn btn-danger btn-sm" style="padding:3px 8px;font-size:11px"
+                onclick="deleteZone(${z.id})">ลบ</button>
+      </div>
+    </div>
+  `).join('');
+}
+
+/* ─── Color Palette ─────────────────────────────── */
+function buildColorPalette() {
+  const palette = document.getElementById('color-palette');
+  palette.innerHTML = ZONE_COLORS.map(c => `
+    <div class="color-swatch${c === ZE.selectedColor ? ' selected' : ''}"
+         style="background:${c}"
+         onclick="pickColor('${c}', this)"></div>
+  `).join('');
+}
+function updateColorPalette(color) {
+  document.querySelectorAll('.color-swatch').forEach(el => {
+    el.classList.toggle('selected', el.style.background === color || el.style.backgroundColor === color);
+  });
+}
+function pickColor(color, el) {
+  ZE.selectedColor = color;
+  document.querySelectorAll('.color-swatch').forEach(e => e.classList.remove('selected'));
+  el.classList.add('selected');
+  redraw();
+}
+</script>

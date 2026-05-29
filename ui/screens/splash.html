@@ -1,0 +1,62 @@
+<div class="splash-screen">
+
+  <!-- Logo + Title -->
+  <div class="splash-logo-wrap">
+    <!-- Real logo: replace logo.png with actual file -->
+    <img class="splash-logo-img" src="/ui/assets/logo.png"
+         onerror="this.style.display='none';document.getElementById('logo-fallback').style.display='flex'"
+         alt="ZENTRA logo">
+    <!-- Fallback CSS logo when PNG not found -->
+    <div id="logo-fallback" style="display:none; width:80px; height:80px; align-items:center; justify-content:center;">
+      <div style="
+        width:64px; height:64px;
+        background: linear-gradient(135deg, #7ecfff 0%, #4a6fa5 45%, #9d4edd 100%);
+        clip-path: polygon(50% 0%, 95% 35%, 80% 100%, 20% 100%, 5% 35%);
+      "></div>
+    </div>
+
+    <div class="splash-title-block">
+      <div class="splash-title">ZENTRA</div>
+      <div class="splash-subtitle">Safety AI System</div>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="splash-progress-wrap">
+    <div class="splash-progress-track">
+      <div class="splash-progress-bar" id="splash-bar"></div>
+    </div>
+    <div class="splash-status" id="splash-status">กำลังเริ่มต้นระบบ...</div>
+    <div class="splash-error" id="splash-error">เกิดข้อผิดพลาด — ไม่สามารถโหลดระบบได้</div>
+  </div>
+
+</div>
+
+<script>
+function init_splash() {
+  const bar    = document.getElementById('splash-bar');
+  const status = document.getElementById('splash-status');
+  const errBox = document.getElementById('splash-error');
+
+  const evtSrc = new EventSource('/api/init');
+
+  evtSrc.onmessage = (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      bar.style.width  = data.percent + '%';
+      status.textContent = data.message;
+
+      if (data.percent >= 100) {
+        evtSrc.close();
+        setTimeout(() => ZENTRA.navigate('source'), 600);
+      }
+    } catch (_) {}
+  };
+
+  evtSrc.onerror = () => {
+    evtSrc.close();
+    errBox.style.display = 'block';
+    status.textContent   = 'ไม่สามารถเชื่อมต่อกับระบบได้';
+  };
+}
+</script>
