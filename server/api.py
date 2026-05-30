@@ -116,20 +116,45 @@ async def _startup():
         # Wire alert callback → WebSocket broadcast + history
         def _on_alert(msg: str, level: str):
             event = _add_event(msg, level)
-            ts    = event["time"]
+            # Authoritative counts from the pipeline (avoids client drift)
+            with pipeline._lock:
+                alerts = dict(pipeline.status.get("alerts", {}))
             broadcast_msg = {
                 "type":      "event",
                 "event":     "alert",
                 "level":     level,
                 "message":   event["message"],
-                "timestamp": ts,
+                "timestamp": event["time"],
                 "camera":    "Cam 1",
+                "alerts":    alerts,
             }
             asyncio.run_coroutine_threadsafe(
                 manager.broadcast(broadcast_msg), _loop
             )
 
         pipeline.on_alert = _on_alert
+
+        # Wire status changes (camera connect/reconnect/disconnect) → WebSocket
+        def _on_status(status: dict):
+            asyncio.run_coroutine_threadsafe(
+                manager.broadcast({
+                    "type":    "event",
+                    "event":   "status",
+                    "modules": status.get("modules", {}),
+                    "alerts":  status.get("alerts", {}),
+                    "camera":  status.get("camera", "disconnected"),
+                    "running": status.get("running", False),
+                }),
+                _loop,
+            )
+
+        pipeline.on_status = _on_status
+
+        # Apply any saved settings to config before first run
+        try:
+            pipeline.apply_settings(_load_settings())
+        except Exception as e:
+            print(f"[API] settings preload skipped: {e}")
 
         # Start frame broadcaster (frames → WebSocket at 10 fps)
         _broadcaster = FrameBroadcaster(pipeline, manager, _loop, fps=10)
@@ -456,16 +481,21 @@ async def history_export():
 async def ws_stream(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        # Send initial status on connect
-        status_msg: dict = {"ppe": "error", "zone": "error", "fall": "error"}
+        # Send initial status on connect (real values, not placeholders)
+        modules = {"ppe": "error", "zone": "error", "fall": "error"}
+        alerts  = {"total": 0, "warning": 0, "emergency": 0}
+        camera  = "disconnected"
         if pipeline:
             with pipeline._lock:
-                status_msg = dict(pipeline.status.get("modules", status_msg))
+                modules = dict(pipeline.status.get("modules", modules))
+                alerts  = dict(pipeline.status.get("alerts", alerts))
+                camera  = pipeline.status.get("camera", camera)
         await websocket.send_json({
             "type":    "event",
             "event":   "status",
-            "modules": status_msg,
-            "alerts":  {"total": 0, "warning": 0, "emergency": 0},
+            "modules": modules,
+            "alerts":  alerts,
+            "camera":  camera,
         })
         # Keep connection alive; frames arrive via FrameBroadcaster
         while True:

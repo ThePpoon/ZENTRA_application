@@ -133,13 +133,19 @@ class Pipeline:
         self._proc_thr   = None
         self._start_time: Optional[float] = None
         self._modules_ok = False
+        self._flip_override: Optional[bool] = None   # None = auto (mirror webcam)
 
         # Called on every real alert: (msg: str, level: str) → None
         self.on_alert: Optional[Callable[[str, str], None]] = None
+        # Called whenever pipeline status changes: (status: dict) → None
+        self.on_status: Optional[Callable[[dict], None]] = None
+
+        self._source_config: dict = {}
 
         self.status: dict = {
             "running":        False,
             "source":         None,
+            "camera":         "disconnected",   # connected | reconnecting | disconnected
             "modules":        {"ppe": "error", "zone": "error", "fall": "error"},
             "alerts":         {"total": 0, "warning": 0, "emergency": 0},
             "uptime_seconds": 0,
@@ -153,6 +159,7 @@ class Pipeline:
         if self._running:
             self.stop()
         self._stop_evt.clear()
+        self._source_config = dict(source_config)
         try:
             self._apply_config(source_config)
             self._import_modules()
@@ -160,22 +167,38 @@ class Pipeline:
         except Exception as e:
             print(f"[Pipeline] ❌ start failed: {e}")
             traceback.print_exc()
+            self._set_camera_state("disconnected")
             return False
 
         self._start_time = time.time()
         self._running    = True
+
+        with self._lock:
+            self.status["running"] = True
+            self.status["source"]  = source_config.get("source", "webcam")
+        self._set_camera_state("connected")
 
         self._proc_thr = threading.Thread(
             target=self._process_loop, daemon=True, name="PipelineLoop"
         )
         self._proc_thr.start()
 
-        with self._lock:
-            self.status["running"] = True
-            self.status["source"]  = source_config.get("source", "webcam")
-
         print(f"[Pipeline] ✅ Started — {source_config.get('source', 'webcam')}")
         return True
+
+    def _set_camera_state(self, state: str):
+        """Update camera connection state and notify listeners (if changed)."""
+        changed = False
+        with self._lock:
+            if self.status.get("camera") != state:
+                self.status["camera"] = state
+                changed = True
+            snapshot = dict(self.status)
+        if changed and self.on_status:
+            try:
+                self.on_status(snapshot)
+            except Exception as e:
+                print(f"[Pipeline] on_status callback: {e}")
 
     def stop(self):
         """Stop all pipeline threads gracefully."""
@@ -203,6 +226,7 @@ class Pipeline:
 
         with self._lock:
             self.status["running"] = False
+        self._set_camera_state("disconnected")
         print("[Pipeline] ⏹️  Stopped")
 
     def is_running(self) -> bool:
@@ -256,6 +280,23 @@ class Pipeline:
             line = settings.get("line", {})
             if "channel_access_token" in line:
                 cfg.LINE_OA_CHANNEL_ACCESS_TOKEN = line["channel_access_token"]
+            # Group IDs: ALERT_RECIPIENTS is built once at config import time,
+            # so updating the groups requires rebuilding the recipients map too.
+            sup = line.get("group_supervisor", cfg.LINE_OA_GROUP_SUPERVISOR)
+            saf = line.get("group_safety",     cfg.LINE_OA_GROUP_SAFETY)
+            emg = line.get("group_emergency",  cfg.LINE_OA_GROUP_EMERGENCY)
+            if any(k in line for k in ("group_supervisor", "group_safety", "group_emergency")):
+                cfg.LINE_OA_GROUP_SUPERVISOR = sup
+                cfg.LINE_OA_GROUP_SAFETY     = saf
+                cfg.LINE_OA_GROUP_EMERGENCY  = emg
+                cfg.ALERT_RECIPIENTS = {
+                    cfg.ALERT_LEVEL_WARNING:   [sup],
+                    cfg.ALERT_LEVEL_ALERT:     [saf, sup],
+                    cfg.ALERT_LEVEL_EMERGENCY: [emg, saf, sup],
+                }
+            cam = settings.get("camera", {})
+            if "flip_horizontal" in cam:
+                self._flip_override = bool(cam["flip_horizontal"])
             print("[Pipeline] ⚙️  Settings applied")
         except Exception as e:
             print(f"[Pipeline] apply_settings: {e}")
@@ -368,6 +409,44 @@ class Pipeline:
             import config as cfg
             return None, cfg.PPE_MODEL_ID, cfg.FALL_MODEL_ID
 
+    def _reconnect_camera(self) -> bool:
+        """Try to reopen the camera with backoff. Returns True on success."""
+        self._set_camera_state("reconnecting")
+        # Stop the old reader and release the dead capture
+        if self._reader:
+            try:
+                self._reader.stop()
+            except Exception:
+                pass
+        if self._cap:
+            try:
+                self._cap.release()
+            except Exception:
+                pass
+            self._cap = None
+
+        delays  = [1.0, 2.0, 3.0, 5.0]
+        attempt = 0
+        while not self._stop_evt.is_set() and self._running:
+            try:
+                self._cap = self._open_camera(self._source_config)
+                reader    = _FrameReader(self._cap)
+                reader.start()
+                self._reader = reader
+                self._set_camera_state("connected")
+                print("[Pipeline] 🔌 Camera reconnected")
+                return True
+            except Exception as e:
+                wait = delays[min(attempt, len(delays) - 1)]
+                attempt += 1
+                print(f"[Pipeline] reconnect attempt {attempt} failed ({e}); retry in {wait}s")
+                # Sleep in small slices so stop() stays responsive
+                slept = 0.0
+                while slept < wait and not self._stop_evt.is_set() and self._running:
+                    time.sleep(0.2)
+                    slept += 0.2
+        return False
+
     def _process_loop(self):
         try:
             import config as cfg
@@ -388,17 +467,31 @@ class Pipeline:
             frame_id         = 0
             last_ppe_preds   = []
             last_fall_preds  = []
-            flip_webcam      = (cfg.CAMERA_SOURCE == "webcam")
+            read_failures    = 0
+            is_file          = (cfg.CAMERA_SOURCE == "file")
+            is_webcam        = (cfg.CAMERA_SOURCE == "webcam")
 
             print("[Pipeline] ▶️  Process loop running")
 
             while not self._stop_evt.is_set() and self._running:
-                ret, raw = reader.read()
+                reader   = self._reader
+                ret, raw = reader.read() if reader else (False, None)
                 if not ret or raw is None:
+                    read_failures += 1
+                    # A live camera that stops yielding frames → reconnect.
+                    # (A finished video file is expected to stop; just idle.)
+                    if read_failures > 40 and not is_file:
+                        print("[Pipeline] ⚠️  Camera signal lost — reconnecting")
+                        if not self._reconnect_camera():
+                            break
+                        read_failures = 0
                     continue
+                read_failures = 0
 
                 frame_id += 1
-                if flip_webcam:
+                # Flip: explicit override wins; otherwise mirror webcam only
+                flip = self._flip_override if self._flip_override is not None else is_webcam
+                if flip:
                     raw = cv2.flip(raw, 1)
 
                 if frame_id % cfg.INFER_EVERY_N_FRAMES == 0:
@@ -442,4 +535,5 @@ class Pipeline:
             self._running = False
             with self._lock:
                 self.status["running"] = False
+            self._set_camera_state("disconnected")
             print("[Pipeline] Process loop ended")

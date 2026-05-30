@@ -56,6 +56,30 @@ class JsApi:
             webview.windows[0].toggle_fullscreen()
 
 
+def shutdown_pipeline():
+    """Stop the AI pipeline + background threads cleanly on window close.
+
+    The uvicorn server runs in a daemon thread, so its FastAPI shutdown
+    event is not guaranteed to fire when the main thread exits. We stop
+    the pipeline explicitly here to release the camera and flush LINE
+    alerts before the process ends.
+    """
+    try:
+        import server.api as api
+        if getattr(api, "_broadcaster", None):
+            api._broadcaster.stop()
+        if getattr(api, "pipeline", None):
+            api.pipeline.stop()
+        try:
+            from alerts.line_notify import stop_sender
+            stop_sender()
+        except Exception:
+            pass
+        print("[App] Clean shutdown complete")
+    except Exception as e:
+        print(f"[App] shutdown warning: {e}")
+
+
 if __name__ == "__main__":
     server_thread = threading.Thread(target=start_server, daemon=True)
     server_thread.start()
@@ -70,4 +94,10 @@ if __name__ == "__main__":
         js_api=JsApi(),
         background_color="#0d1b2a",
     )
+    # Stop the pipeline as soon as the window begins closing
+    window.events.closing += shutdown_pipeline
+
     webview.start(debug=False)
+
+    # Safety net: also stop after the GUI loop returns
+    shutdown_pipeline()

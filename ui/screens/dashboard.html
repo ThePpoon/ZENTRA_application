@@ -9,6 +9,11 @@
            onerror="this.src=''"
            alt="Video feed">
       <span class="camera-label" id="camera-label">Camera #1</span>
+      <!-- Connecting / reconnecting overlay -->
+      <div class="video-overlay hidden" id="video-overlay">
+        <div class="video-overlay-spinner"></div>
+        <div class="video-overlay-text">กำลังเชื่อมต่อกล้อง...</div>
+      </div>
     </div>
 
     <!-- Right Status Panel -->
@@ -75,6 +80,9 @@
           <button class="btn btn-ghost btn-sm w-full" onclick="ZENTRA.navigate('history')">
             📋 ดูประวัติ
           </button>
+          <button class="btn btn-danger btn-sm w-full" id="stop-btn" onclick="stopPipeline()">
+            ⏹ หยุด / เปลี่ยนแหล่งภาพ
+          </button>
         </div>
 
       </div>
@@ -91,6 +99,7 @@ function init_dashboard() {
   // Refresh status display
   ZENTRA._updateModuleStatus();
   ZENTRA._updateAlertCounters();
+  ZENTRA._updateCameraState();
   // Show emergency if any
   if (ZENTRA.state.last_emergency) {
     ZENTRA._showEmergencyBanner(ZENTRA.state.last_emergency);
@@ -98,5 +107,17 @@ function init_dashboard() {
   // Ensure WS is connected
   ZENTRA.connectWS();
   ZENTRA.startStatusPoll();
+}
+
+async function stopPipeline() {
+  const btn = document.getElementById('stop-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'กำลังหยุด...'; }
+  try {
+    await fetch('/api/pipeline/stop', { method: 'POST' });
+  } catch (_) {}
+  ZENTRA.state.pipeline.running = false;
+  ZENTRA.state.camera = 'disconnected';
+  ZENTRA.stopStatusPoll();
+  ZENTRA.navigate('source');
 }
 </script>

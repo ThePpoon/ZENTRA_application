@@ -12,6 +12,7 @@ const ZENTRA = {
     uptime:   0,
     last_emergency: null,
     camera_label: 'Camera #1',
+    camera:   'disconnected',   // connected | reconnecting | disconnected
   },
 
   ws: null,
@@ -96,15 +97,22 @@ const ZENTRA = {
       if (msg.event === 'status' || msg.modules) {
         if (msg.modules)  ZENTRA.state.modules  = msg.modules;
         if (msg.alerts)   ZENTRA.state.alerts   = msg.alerts;
+        if (msg.camera)   ZENTRA.state.camera   = msg.camera;
         ZENTRA._updateModuleStatus();
         ZENTRA._updateAlertCounters();
+        ZENTRA._updateCameraState();
       }
       if (msg.event === 'alert') {
         const lvl = msg.level || 'warning';
-        ZENTRA.state.alerts.total++;
-        if (lvl === 'warning' || lvl === 'alert') ZENTRA.state.alerts.warning++;
+        // Prefer authoritative counts from server; fall back to local increment
+        if (msg.alerts) {
+          ZENTRA.state.alerts = msg.alerts;
+        } else {
+          ZENTRA.state.alerts.total++;
+          if (lvl === 'warning' || lvl === 'alert') ZENTRA.state.alerts.warning++;
+          if (lvl === 'emergency') ZENTRA.state.alerts.emergency++;
+        }
         if (lvl === 'emergency') {
-          ZENTRA.state.alerts.emergency++;
           ZENTRA.state.last_emergency = msg;
           ZENTRA._showEmergencyBanner(msg);
         }
@@ -139,6 +147,24 @@ const ZENTRA = {
     if (el('cnt-emergency'))el('cnt-emergency').textContent= a.emergency;
   },
 
+  _updateCameraState() {
+    // Show a connecting/reconnecting overlay over the video feed.
+    const overlay = document.getElementById('video-overlay');
+    if (!overlay) return;
+    const state = ZENTRA.state.camera;
+    if (state === 'connected') {
+      overlay.classList.add('hidden');
+    } else {
+      overlay.classList.remove('hidden');
+      const txt = overlay.querySelector('.video-overlay-text');
+      if (txt) {
+        txt.textContent = (state === 'reconnecting')
+          ? 'สัญญาณกล้องหลุด — กำลังเชื่อมต่อใหม่...'
+          : 'กำลังเชื่อมต่อกล้อง...';
+      }
+    }
+  },
+
   _showEmergencyBanner(msg) {
     const banner = document.getElementById('emergency-banner');
     if (!banner) return;
@@ -151,6 +177,9 @@ const ZENTRA = {
 
   /* ── Status Poll ─────────────────────────────── */
   startStatusPoll() {
+    // Clear any existing poll first so repeated dashboard visits don't
+    // stack multiple intervals (would multiply /api/status traffic).
+    if (ZENTRA._statusTimer) clearInterval(ZENTRA._statusTimer);
     ZENTRA._statusTimer = setInterval(async () => {
       try {
         const res  = await fetch('/api/status');
@@ -158,8 +187,10 @@ const ZENTRA = {
         ZENTRA.state.modules = data.modules ?? ZENTRA.state.modules;
         ZENTRA.state.alerts  = data.alerts  ?? ZENTRA.state.alerts;
         ZENTRA.state.uptime  = data.uptime  ?? 0;
+        if (data.camera) ZENTRA.state.camera = data.camera;
         ZENTRA._updateModuleStatus();
         ZENTRA._updateAlertCounters();
+        ZENTRA._updateCameraState();
       } catch (_) {}
     }, 2000);
   },
