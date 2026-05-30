@@ -170,6 +170,7 @@ TRAIN_MOMENTUM      = 0.937
 TRAIN_WEIGHT_DECAY  = 0.0005
 TRAIN_WARMUP_EPOCHS = 5
 TRAIN_VAL_SPLIT     = 0.15
+TRAIN_AUG           = os.getenv("TRAIN_AUG", "true").lower() == "true"  # used by training/trainer.py
 YOLO_BASE_MODEL     = os.getenv("YOLO_BASE_MODEL", "yolov8m.pt")
 
 # ================================================================
