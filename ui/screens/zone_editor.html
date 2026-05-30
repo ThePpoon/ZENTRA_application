@@ -7,6 +7,11 @@
       <img id="zone-bg" src="" alt="Camera snapshot">
       <canvas id="zone-canvas"></canvas>
       <span class="camera-label">Camera #1</span>
+      <div class="video-overlay hidden" id="ze-overlay">
+        <div class="video-overlay-text" id="ze-overlay-text">กำลังโหลดภาพจากกล้อง...</div>
+        <button class="btn btn-primary btn-sm" id="ze-overlay-btn"
+                onclick="ZENTRA.navigate('source')" style="display:none">ไปเชื่อมต่อกล้อง</button>
+      </div>
     </div>
 
     <!-- Right Panel -->
@@ -68,24 +73,53 @@ function init_zone_editor() {
 
   buildColorPalette();
 
-  // Load snapshot
-  const bg = document.getElementById('zone-bg');
-  bg.onload = () => {
-    ZE.bgW = bg.naturalWidth  || 960;
-    ZE.bgH = bg.naturalHeight || 540;
-    fitCanvas();
-    loadZones();
-  };
-  bg.onerror = () => {
-    ZE.bgW = 960; ZE.bgH = 540;
-    fitCanvas();
-    loadZones();
-  };
-  bg.src = '/api/frame/snapshot?' + Date.now();
+  loadSnapshot();   // loads camera frame (with status check + retry)
 
   ZE.canvas.addEventListener('mousedown', onCanvasDown);
   ZE.canvas.addEventListener('dblclick',  onCanvasDbl);
   window.addEventListener('resize', fitCanvas);
+}
+
+function _zeOverlay(show, text, showBtn) {
+  const ov = document.getElementById('ze-overlay');
+  if (!ov) return;
+  ov.classList.toggle('hidden', !show);
+  if (show) {
+    const t = document.getElementById('ze-overlay-text');
+    const b = document.getElementById('ze-overlay-btn');
+    if (t) t.textContent = text;
+    if (b) b.style.display = showBtn ? 'inline-flex' : 'none';
+  }
+}
+
+async function loadSnapshot(attempt = 0) {
+  // 1) Zone Editor needs a live camera frame to draw on
+  let running = false;
+  try { running = (await (await fetch('/api/status')).json()).running; } catch (_) {}
+  if (!running) {
+    _zeOverlay(true, 'ยังไม่ได้เชื่อมต่อกล้อง — เปิดกล้องก่อนจึงจะตั้งค่า Zone ได้', true);
+    return;
+  }
+
+  // 2) Fetch the snapshot; a 1×1 dark pixel means "no frame yet" → retry
+  const bg = document.getElementById('zone-bg');
+  bg.onload = () => {
+    if ((bg.naturalWidth || 0) <= 1) {
+      if (attempt < 10) { setTimeout(() => loadSnapshot(attempt + 1), 500); return; }
+      _zeOverlay(true, 'ยังไม่มีภาพจากกล้อง ลองกลับไปหน้ากล้องแล้วเข้ามาใหม่', true);
+      return;
+    }
+    _zeOverlay(false);
+    ZE.bgW = bg.naturalWidth;
+    ZE.bgH = bg.naturalHeight;
+    fitCanvas();
+    loadZones();
+  };
+  bg.onerror = () => {
+    if (attempt < 10) setTimeout(() => loadSnapshot(attempt + 1), 500);
+    else _zeOverlay(true, 'โหลดภาพไม่สำเร็จ', true);
+  };
+  bg.src = '/api/frame/snapshot?' + Date.now();
 }
 
 function fitCanvas() {
