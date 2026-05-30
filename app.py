@@ -1,7 +1,18 @@
+import sys
 import threading
 import time
 import webview
 from pathlib import Path
+
+# The ZENTRA AI modules print emoji / Thai (✅ ⚠️ 🪖 →) at import and at
+# runtime. On a Windows cp1252 console these prints raise
+# UnicodeEncodeError, which would crash pipeline startup. Force UTF-8 with
+# errors='replace' so logging can never take the app down.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 
 def start_server():
