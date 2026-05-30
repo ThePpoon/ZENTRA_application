@@ -8,7 +8,10 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-load_dotenv(override=False)
+# Load this project's .env explicitly so it works no matter what the
+# current working directory is (the desktop app imports config from a
+# different cwd). override=False keeps real environment vars authoritative.
+load_dotenv(Path(__file__).parent / ".env", override=False)
 
 # ================================================================
 # BASE PATHS

@@ -9,12 +9,13 @@ python-dotenv>=1.0.0
 pyyaml>=6.0
 
 # ── Roboflow Inference ───────────────────────────────────────
-# inference-sdk>=0.18.0   # Roboflow local inference server
-# inference>=0.18.0       # Alternative: cloud inference
+inference-sdk>=0.9.0      # HTTP client → local Docker inference server (port 9001)
+# inference>=0.18.0       # Optional: run the server via pip instead of Docker
 
 # ── AI / ML ──────────────────────────────────────────────────
 ultralytics>=8.1.0        # YOLOv8 training + inference
-mediapipe>=0.10.0         # Pose estimation (33 keypoints)
+mediapipe==0.10.14        # Pose estimation (33 kpts) — pinned: ships mp.solutions
+protobuf>=4.25.3,<5       # REQUIRED by mediapipe 0.10.14 (protobuf 5+/7 breaks it)
 
 # ── Training ─────────────────────────────────────────────────
 roboflow>=1.1.0           # Dataset download + upload

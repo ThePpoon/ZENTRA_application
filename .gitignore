@@ -1,0 +1,18 @@
+# ── Secrets / local config ──
+.env
+
+# ── Python ──
+__pycache__/
+*.pyc
+*.pyo
+
+# ── Runtime data / artifacts ──
+data/collected/
+data/zones.json
+logs/
+runs/
+models/*.pt
+*.log
+
+# ── Debug ──
+debug_*.jpg
