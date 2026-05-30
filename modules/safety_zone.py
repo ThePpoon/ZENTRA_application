@@ -177,7 +177,8 @@ def on_frame(frame: np.ndarray, metadata, window_title: str):
 
     cv2.putText(frame, status, (10, 60),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.54, color, 2, cv2.LINE_AA)
-    cv2.imshow(window_title, frame)
+    if window_title:
+        cv2.imshow(window_title, frame)
 
 
 # ================================================================

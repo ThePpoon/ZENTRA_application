@@ -89,7 +89,8 @@ def on_frame(frame: np.ndarray, metadata, window_title: str):
     cv2.putText(frame, osd, (10, 25),
                 cv2.FONT_HERSHEY_SIMPLEX, cfg.FONT_SCALE,
                 cfg.OSD_COLOR, cfg.FONT_THICKNESS, cv2.LINE_AA)
-    cv2.imshow(window_title, frame)
+    if window_title:
+        cv2.imshow(window_title, frame)
 
 
 # ================================================================
