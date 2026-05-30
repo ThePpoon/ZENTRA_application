@@ -179,25 +179,87 @@
 </template>
 
 <template id="tpl-data">
-  <div class="settings-section-title">เกี่ยวกับข้อมูล</div>
-  <div class="settings-section-sub">ข้อมูลที่ระบบเก็บไว้และการจัดการข้อมูล</div>
+  <div class="settings-section-title">ข้อมูล &amp; การเทรนโมเดล</div>
+  <div class="settings-section-sub">เก็บภาพอัตโนมัติขณะใช้งาน → label ให้ถูก → เทรนให้แม่นขึ้น</div>
+
+  <!-- Collected data -->
   <div class="settings-group">
-    <div class="settings-group-title">ข้อมูลที่เก็บสะสม</div>
+    <div class="settings-group-title">
+      ข้อมูลที่เก็บสะสม
+      <button class="btn btn-ghost btn-sm" style="float:right;padding:2px 8px" onclick="loadDataStats()">รีเฟรช</button>
+    </div>
     <div class="card">
       <div class="flex justify-between items-center mb-2">
-        <span class="text-sub">PPE violations</span><span class="text-accent">—</span>
+        <span class="text-sub">PPE violations</span><span class="text-accent" id="ds-ppe">—</span>
       </div>
       <div class="flex justify-between items-center mb-2">
-        <span class="text-sub">Zone intrusions</span><span class="text-accent">—</span>
+        <span class="text-sub">Zone intrusions</span><span class="text-accent" id="ds-zone">—</span>
       </div>
       <div class="flex justify-between items-center mb-2">
-        <span class="text-sub">Fall events</span><span class="text-accent">—</span>
+        <span class="text-sub">Fall events</span><span class="text-accent" id="ds-fall">—</span>
+      </div>
+      <div class="flex justify-between items-center mb-2">
+        <span class="text-sub">Normal frames</span><span class="text-accent" id="ds-normal">—</span>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--border);margin:8px 0">
+      <div class="flex justify-between items-center mb-2">
+        <span class="text-sub">รวม (มี label)</span><span class="text-accent" id="ds-total">—</span>
       </div>
       <div class="flex justify-between items-center">
-        <span class="text-sub">Normal frames</span><span class="text-accent">—</span>
+        <span class="text-sub">พื้นที่จัดเก็บ</span><span class="text-accent" id="ds-size">—</span>
       </div>
     </div>
+    <div style="display:flex;gap:8px;margin-top:10px">
+      <button class="btn btn-outline btn-sm" onclick="uploadToRoboflow()">อัปโหลดขึ้น Roboflow (เพื่อ label)</button>
+      <button class="btn btn-danger btn-sm" style="margin-left:auto" onclick="clearData()">ลบข้อมูลสะสม</button>
+    </div>
   </div>
+
+  <!-- Training -->
+  <div class="settings-group">
+    <div class="settings-group-title">เทรนโมเดล (Fine-tune บน GPU)</div>
+    <div class="card">
+      <div class="flex gap-3 items-center mb-3" style="flex-wrap:wrap">
+        <label class="input-label" style="margin:0">โมดูล</label>
+        <select class="input" id="train-task" style="width:auto;min-width:120px">
+          <option value="ppe">PPE</option>
+          <option value="fall">Fall</option>
+        </select>
+        <label class="input-label" style="margin:0 0 0 8px">แหล่งข้อมูล</label>
+        <select class="input" id="train-source" style="width:auto;min-width:170px">
+          <option value="local">ข้อมูลในเครื่อง (data/collected)</option>
+          <option value="roboflow">Roboflow (ที่ label แล้ว)</option>
+        </select>
+      </div>
+      <div class="input-row" id="train-project-row" style="display:none;margin-bottom:10px">
+        <input class="input" id="train-project" type="text" placeholder="ชื่อ Roboflow project เช่น zentra-ppe">
+      </div>
+
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-primary" id="train-btn" onclick="startTraining()">เริ่มเทรน</button>
+        <button class="btn btn-ghost"   id="train-stop" onclick="stopTraining()" style="display:none">หยุด</button>
+        <span class="text-sub" id="train-state" style="margin-left:auto"></span>
+      </div>
+
+      <!-- progress -->
+      <div id="train-progress" style="display:none;margin-top:12px">
+        <div class="flex justify-between mb-1">
+          <span class="input-label" id="train-epoch-lbl">Epoch —</span>
+          <span class="text-accent font-600" id="train-map">mAP50: —</span>
+        </div>
+        <div class="cat-bar-track"><div class="cat-bar-fill ppe" id="train-bar" style="width:0%"></div></div>
+        <pre id="train-log" style="margin-top:10px;max-height:180px;overflow:auto;background:#0a1626;
+             border:1px solid var(--border);border-radius:8px;padding:10px;font-size:11px;
+             color:rgba(255,255,255,0.7);white-space:pre-wrap;line-height:1.45"></pre>
+      </div>
+
+      <p class="text-xs text-muted" style="margin-top:10px;line-height:1.6">
+        💡 ความแม่นยำมาจาก <b>label ที่ถูกต้อง</b> — แนะนำ: เก็บข้อมูล → อัปโหลด Roboflow →
+        แก้ label → เทรนจาก Roboflow ดู TRAINING.md
+      </p>
+    </div>
+  </div>
+  <div id="save-msg" style="margin-top:8px;font-size:12px;color:var(--green);min-height:16px;"></div>
 </template>
 
 <template id="tpl-about">
@@ -283,6 +345,19 @@ function showSection(name, el) {
       if (el) el.textContent = d.running ? 'ออนไลน์' : 'ออฟไลน์ (Demo)';
     }).catch(() => {});
   }
+  if (name === 'data') {
+    loadDataStats();
+    const srcSel = document.getElementById('train-source');
+    if (srcSel) {
+      srcSel.onchange = () => {
+        document.getElementById('train-project-row').style.display =
+          (srcSel.value === 'roboflow') ? 'flex' : 'none';
+      };
+    }
+    refreshJobStatus();          // resume display if a job is already running
+  } else {
+    stopJobPoll();               // leaving the data section → stop polling
+  }
 }
 
 async function saveSettings() {
@@ -326,5 +401,107 @@ async function changeSource() {
   await fetch('/api/pipeline/stop', { method: 'POST' });
   ZENTRA.state.pipeline.running = false;
   ZENTRA.navigate('source');
+}
+
+/* ─── Data & Training ──────────────────────────── */
+var _jobTimer = null;
+
+async function loadDataStats() {
+  try {
+    const d = await (await fetch('/api/data/stats')).json();
+    const c = d.categories || {};
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    set('ds-ppe',    (c.ppe_violations  ?? 0) + ' รูป');
+    set('ds-zone',   (c.zone_intrusions ?? 0) + ' รูป');
+    set('ds-fall',   (c.fall_events     ?? 0) + ' รูป');
+    set('ds-normal', (c.normal          ?? 0) + ' รูป');
+    set('ds-total',  (d.total_images ?? 0) + ' รูป (' + (d.labeled ?? 0) + ' มี label)');
+    set('ds-size',   (d.size_mb ?? 0) + ' MB');
+  } catch (_) {}
+}
+
+async function clearData() {
+  if (!confirm('ลบข้อมูลที่เก็บสะสมทั้งหมด? (ลบไฟล์ภาพ + label ออกถาวร)')) return;
+  await fetch('/api/data/clear', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+  loadDataStats();
+}
+
+async function uploadToRoboflow() {
+  const task    = document.getElementById('train-task').value;
+  const project = (document.getElementById('train-project') || {}).value || '';
+  const body    = { task };
+  if (project.trim()) body.project = project.trim();
+  const res = await fetch('/api/jobs/upload', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+  });
+  const d = await res.json();
+  if (!d.ok) { alert(d.message || d.error || 'เริ่มไม่สำเร็จ'); return; }
+  showJobUI(true); startJobPoll();
+}
+
+async function startTraining() {
+  const task   = document.getElementById('train-task').value;
+  const source = document.getElementById('train-source').value;
+  const body   = { task };
+  if (source === 'roboflow') {
+    const p = (document.getElementById('train-project').value || '').trim();
+    if (!p) { alert('กรุณาระบุชื่อ Roboflow project'); return; }
+    body.project = p;
+  }
+  const res = await fetch('/api/jobs/train', {
+    method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+  });
+  const d = await res.json();
+  if (!d.ok) { alert(d.message || d.error || 'เริ่มไม่สำเร็จ'); return; }
+  showJobUI(true); startJobPoll();
+}
+
+async function stopTraining() {
+  await fetch('/api/jobs/stop', { method: 'POST' });
+  refreshJobStatus();
+}
+
+function showJobUI(running) {
+  const prog = document.getElementById('train-progress');
+  const btn  = document.getElementById('train-btn');
+  const stop = document.getElementById('train-stop');
+  if (prog) prog.style.display = 'block';
+  if (btn)  btn.disabled = running;
+  if (stop) stop.style.display = running ? 'inline-flex' : 'none';
+}
+
+function startJobPoll() {
+  stopJobPoll();
+  _jobTimer = setInterval(refreshJobStatus, 1500);
+}
+function stopJobPoll() {
+  if (_jobTimer) { clearInterval(_jobTimer); _jobTimer = null; }
+}
+
+async function refreshJobStatus() {
+  let d;
+  try { d = await (await fetch('/api/jobs/status')).json(); } catch (_) { return; }
+  if (!document.getElementById('train-state')) return;   // left the section
+
+  const running = (d.state === 'running');
+  showJobUI(running);
+
+  const stateEl = document.getElementById('train-state');
+  const stateTh = { idle:'พร้อม', running:'กำลังทำงาน...', done:'เสร็จสิ้น ✓', error:'ผิดพลาด', stopped:'หยุดแล้ว' };
+  if (stateEl) stateEl.textContent = (d.label ? d.label + ' — ' : '') + (stateTh[d.state] || d.state);
+
+  if (d.total > 0) {
+    document.getElementById('train-epoch-lbl').textContent = `Epoch ${d.epoch}/${d.total}`;
+    document.getElementById('train-bar').style.width = Math.round(d.epoch / d.total * 100) + '%';
+  }
+  if (d.map50 != null) document.getElementById('train-map').textContent = 'mAP50: ' + d.map50.toFixed(4);
+
+  const log = document.getElementById('train-log');
+  if (log && d.lines) { log.textContent = d.lines.join('\n'); log.scrollTop = log.scrollHeight; }
+
+  if (!running) {
+    stopJobPoll();
+    if (d.state === 'done') loadDataStats();
+  }
 }
 </script>

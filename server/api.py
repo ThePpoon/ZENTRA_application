@@ -25,6 +25,11 @@ UI_DIR   = BASE_DIR / "ui"
 DATA_DIR = BASE_DIR / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
+# Backend (AI) project + its auto-collected data
+ZENTRA_BACKEND = BASE_DIR.parent / "ZENTRA"
+COLLECTED_DIR  = ZENTRA_BACKEND / "data" / "collected"
+_DATA_CATEGORIES = ["ppe_violations", "zone_intrusions", "fall_events", "normal"]
+
 # ── FastAPI app ─────────────────────────────────────────────
 app = FastAPI(title="ZENTRA API", docs_url=None, redoc_url=None)
 app.add_middleware(
@@ -472,6 +477,97 @@ async def history_export():
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=zentra_history.csv"},
     )
+
+
+# ================================================================
+# DATA COLLECTION (training dataset) + JOBS (train / upload)
+# ================================================================
+def _dir_size_mb(path: Path) -> float:
+    total = 0
+    if path.exists():
+        for f in path.rglob("*"):
+            if f.is_file():
+                try:
+                    total += f.stat().st_size
+                except OSError:
+                    pass
+    return round(total / (1024 * 1024), 1)
+
+
+@app.get("/api/data/stats")
+async def data_stats():
+    cats = {}
+    for cat in _DATA_CATEGORIES:
+        d = COLLECTED_DIR / cat
+        cats[cat] = len(list(d.glob("*.jpg"))) if d.exists() else 0
+    return JSONResponse({
+        "categories":   cats,
+        "total_images": sum(cats.values()),
+        "size_mb":      _dir_size_mb(COLLECTED_DIR),
+        "labeled":      sum(
+            1 for cat in _DATA_CATEGORIES
+            for j in (COLLECTED_DIR / cat).glob("*.jpg")
+            if j.with_suffix(".txt").exists()
+        ) if COLLECTED_DIR.exists() else 0,
+    })
+
+
+@app.post("/api/data/clear")
+async def data_clear(body: dict[str, Any] | None = None):
+    body = body or {}
+    cats = [body["category"]] if body.get("category") in _DATA_CATEGORIES else _DATA_CATEGORIES
+    removed = 0
+    for cat in cats:
+        d = COLLECTED_DIR / cat
+        if not d.exists():
+            continue
+        for f in list(d.glob("*.jpg")) + list(d.glob("*.txt")):
+            try:
+                f.unlink()
+                removed += 1
+            except OSError:
+                pass
+    return JSONResponse({"ok": True, "removed_files": removed})
+
+
+@app.post("/api/jobs/train")
+async def jobs_train(body: dict[str, Any]):
+    from server.jobs import manager as jobs
+    task    = body.get("task", "ppe")
+    if task not in ("ppe", "fall"):
+        return JSONResponse({"ok": False, "error": "task ต้องเป็น ppe หรือ fall"}, status_code=400)
+    args = ["training.trainer", "--task", task, "--export"]
+    project = body.get("project")
+    if project:
+        args += ["--project", str(project)]
+    ok, msg = jobs.start(args, label=f"เทรน {task.upper()}")
+    return JSONResponse({"ok": ok, "message": msg}, status_code=200 if ok else 409)
+
+
+@app.post("/api/jobs/upload")
+async def jobs_upload(body: dict[str, Any]):
+    from server.jobs import manager as jobs
+    task = body.get("task", "ppe")
+    if task not in ("ppe", "fall", "zone"):
+        return JSONResponse({"ok": False, "error": "task ไม่ถูกต้อง"}, status_code=400)
+    args = ["training.upload", "--task", task]
+    project = body.get("project")
+    if project:
+        args += ["--project", str(project)]
+    ok, msg = jobs.start(args, label=f"อัปโหลด {task.upper()} → Roboflow")
+    return JSONResponse({"ok": ok, "message": msg}, status_code=200 if ok else 409)
+
+
+@app.get("/api/jobs/status")
+async def jobs_status():
+    from server.jobs import manager as jobs
+    return JSONResponse(jobs.status())
+
+
+@app.post("/api/jobs/stop")
+async def jobs_stop():
+    from server.jobs import manager as jobs
+    return JSONResponse({"ok": jobs.stop()})
 
 
 # ================================================================
