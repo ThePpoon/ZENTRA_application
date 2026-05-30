@@ -28,32 +28,39 @@ const ZENTRA = {
       container.innerHTML = html;
       ZENTRA._currentScreen = screenId;
 
-      // innerHTML does NOT auto-execute <script> tags — re-execute them
-      const scripts       = container.querySelectorAll('script');
+      // innerHTML does NOT auto-execute <script> tags — re-create them.
+      // Re-creating a <script> element makes the browser execute it in
+      // GLOBAL scope (eval() would only define functions locally, so
+      // window['init_<screen>'] would never be found).
+      const scripts = container.querySelectorAll('script');
       const externalLoads = [];
 
-      for (const s of scripts) {
-        if (s.src) {
-          // Load external CDN scripts only once
-          if (!document.querySelector(`script[src="${s.src}"]`)) {
+      for (const oldScript of scripts) {
+        if (oldScript.src) {
+          // External CDN script — load once, append to head, await onload
+          if (!document.querySelector(`script[data-cdn="${oldScript.src}"]`)) {
             externalLoads.push(new Promise(resolve => {
-              const el    = document.createElement('script');
-              el.src      = s.src;
-              el.onload   = resolve;
-              el.onerror  = resolve;
+              const el = document.createElement('script');
+              el.src   = oldScript.src;
+              el.setAttribute('data-cdn', oldScript.src);
+              el.onload  = resolve;
+              el.onerror = resolve;
               document.head.appendChild(el);
             }));
           }
-        } else if (s.textContent.trim()) {
-          // Execute inline scripts immediately
-          try { eval(s.textContent); } catch (e) { console.error('[ZENTRA] inline script:', e); }
+        } else if (oldScript.textContent.trim()) {
+          // Inline script — re-create so it runs in global scope
+          const el = document.createElement('script');
+          el.textContent = oldScript.textContent;
+          document.body.appendChild(el);
+          document.body.removeChild(el);
         }
       }
 
-      // Wait for any external scripts to finish loading
+      // Wait for external scripts (e.g. Chart.js) before calling init
       if (externalLoads.length) await Promise.all(externalLoads);
 
-      // Call the screen's init function
+      // Call the screen's init function (now globally defined)
       const fn = window[`init_${screenId}`];
       if (typeof fn === 'function') fn(params);
     } catch (e) {
@@ -200,4 +207,8 @@ function renderNavbar(activeTab) {
 }
 
 /* ─── Init ─────────────────────────────────────── */
-document.addEventListener('DOMContentLoaded', () => { ZENTRA.init(); });
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => { ZENTRA.init(); });
+} else {
+  ZENTRA.init();
+}

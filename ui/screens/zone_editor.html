@@ -44,7 +44,7 @@
 
 <script>
 /* ─── Zone Editor State ─────────────────────────── */
-const ZE = {
+var ZE = {
   zones:       [],          // loaded from API
   drawing:     false,       // user is placing new zone points
   currentPts:  [],          // points being drawn
@@ -57,7 +57,7 @@ const ZE = {
   offsetX: 0, offsetY: 0,
 };
 
-const ZONE_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899'];
+var ZONE_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','#ec4899'];
 
 /* ─── Init ─────────────────────────────────────── */
 function init_zone_editor() {

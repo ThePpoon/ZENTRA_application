@@ -68,7 +68,7 @@
 </div>
 
 <script>
-let _selectedSource = 'webcam';
+var _selectedSource = 'webcam';
 
 function selectSource(el) {
   document.querySelectorAll('.radio-option').forEach(o => o.classList.remove('selected'));
@@ -104,9 +104,19 @@ async function connectSource() {
   btn.textContent  = 'กำลังเชื่อมต่อ...';
 
   const body = { source: _selectedSource };
-  if (_selectedSource === 'rtsp')  body.url  = document.getElementById('rtsp-url').value.trim();
-  if (_selectedSource === 'file')  body.path = document.getElementById('file-path').value.trim();
-  if (_selectedSource === 'other') body.path = document.getElementById('other-path').value.trim();
+  if (_selectedSource === 'rtsp') {
+    body.rtsp_url = document.getElementById('rtsp-url').value.trim();
+  }
+  if (_selectedSource === 'file') {
+    body.video_file_path = document.getElementById('file-path').value.trim();
+  }
+  if (_selectedSource === 'other') {
+    // "Other" = a numeric camera index → treat as webcam
+    const v = document.getElementById('other-path').value.trim();
+    const n = parseInt(v, 10);
+    if (!isNaN(n)) { body.source = 'webcam'; body.webcam_index = n; }
+    else           { body.video_file_path = v; body.source = 'file'; }
+  }
 
   try {
     const res  = await fetch('/api/pipeline/start', {
