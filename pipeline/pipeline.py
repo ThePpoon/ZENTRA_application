@@ -134,6 +134,7 @@ class Pipeline:
         self._start_time: Optional[float] = None
         self._modules_ok = False
         self._flip_override: Optional[bool] = None   # None = auto (mirror webcam)
+        self._inf_client = None                       # InferenceHTTPClient ref
 
         # Called on every real alert: (msg: str, level: str) → None
         self.on_alert: Optional[Callable[[str, str], None]] = None
@@ -266,10 +267,13 @@ class Pipeline:
             ai = settings.get("ai", {})
             if "ppe_confidence" in ai:
                 cfg.INFERENCE_CONFIDENCE = float(ai["ppe_confidence"])
+                self._apply_infer_config()   # push new threshold to the client live
             if "fall_bbox_ratio" in ai:
                 cfg.FALL_BBOX_RATIO_THRESH = float(ai["fall_bbox_ratio"])
             if "fall_confirm_frames" in ai:
                 cfg.FALL_CONFIRM_FRAMES = int(ai["fall_confirm_frames"])
+            if "use_local_model" in ai:
+                cfg.USE_LOCAL_MODEL = bool(ai["use_local_model"])  # applies on next (re)connect
             alr = settings.get("alerts", {})
             if "violation_cooldown_seconds" in alr:
                 cfg.VIOLATION_COOLDOWN_SECONDS = int(alr["violation_cooldown_seconds"])
@@ -391,6 +395,22 @@ class Pipeline:
         cap.set(cv2.CAP_PROP_FPS, 30)
         return cap
 
+    def _apply_infer_config(self):
+        """Push confidence / IoU NMS thresholds to the inference client so the
+        Settings PPE-confidence slider actually affects detections."""
+        if not self._inf_client:
+            return
+        try:
+            from inference_sdk import InferenceConfiguration
+            import config as cfg
+            self._inf_client.configure(InferenceConfiguration(
+                confidence_threshold=float(cfg.INFERENCE_CONFIDENCE),
+                iou_threshold=float(cfg.INFERENCE_IOU),
+                class_agnostic_nms=True,
+            ))
+        except Exception as e:
+            print(f"[Pipeline] infer config skipped: {e}")
+
     def _make_client(self):
         try:
             from inference_sdk import InferenceHTTPClient
@@ -402,7 +422,10 @@ class Pipeline:
             client  = InferenceHTTPClient(
                 api_url=cfg.INFERENCE_SERVER_URL, api_key=cfg.ROBOFLOW_API_KEY
             )
-            print(f"[Pipeline] Inference server: {cfg.INFERENCE_SERVER_URL}")
+            self._inf_client = client
+            self._apply_infer_config()
+            print(f"[Pipeline] Inference server: {cfg.INFERENCE_SERVER_URL} "
+                  f"(conf={cfg.INFERENCE_CONFIDENCE}, iou={cfg.INFERENCE_IOU})")
             return client, ppe_id, fall_id
         except Exception as e:
             print(f"[Pipeline] inference_sdk unavailable: {e} — running without YOLO")

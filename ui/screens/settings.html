@@ -253,10 +253,42 @@
              color:rgba(255,255,255,0.7);white-space:pre-wrap;line-height:1.45"></pre>
       </div>
 
+      <div class="toggle-wrap" style="margin-top:12px">
+        <label class="toggle"><input type="checkbox" id="use-local-model" onchange="setLocalModel(this.checked)">
+        <div class="toggle-track"></div><div class="toggle-thumb"></div></label>
+        <span class="text-sub">ใช้โมเดลที่เทรนเอง (models/*_finetuned.pt) — มีผลเมื่อเชื่อมกล้องครั้งถัดไป</span>
+      </div>
+
       <p class="text-xs text-muted" style="margin-top:10px;line-height:1.6">
         💡 ความแม่นยำมาจาก <b>label ที่ถูกต้อง</b> — แนะนำ: เก็บข้อมูล → อัปโหลด Roboflow →
         แก้ label → เทรนจาก Roboflow ดู TRAINING.md
       </p>
+    </div>
+  </div>
+
+  <!-- Model accuracy metrics -->
+  <div class="settings-group">
+    <div class="settings-group-title">ความแม่นยำโมเดล (ผลการเทรนล่าสุด)</div>
+    <div class="card" id="metrics-card">
+      <div class="text-muted text-xs" id="metrics-empty">ยังไม่มีผลการเทรน — เทรนโมเดลเพื่อดูค่า mAP / precision / recall</div>
+      <div id="metrics-body" style="display:none">
+        <div class="flex justify-between items-center mb-2">
+          <span class="text-sub">โมดูล</span><span class="text-accent font-600" id="m-task">—</span>
+        </div>
+        <div class="cat-bar-row"><span class="cat-bar-label" style="width:90px">mAP@50</span>
+          <div class="cat-bar-track"><div class="cat-bar-fill zone" id="m-bar-map50" style="width:0%"></div></div>
+          <span class="cat-bar-count" id="m-map50">—</span></div>
+        <div class="cat-bar-row"><span class="cat-bar-label" style="width:90px">mAP@50-95</span>
+          <div class="cat-bar-track"><div class="cat-bar-fill ppe" id="m-bar-map" style="width:0%"></div></div>
+          <span class="cat-bar-count" id="m-map">—</span></div>
+        <div class="cat-bar-row"><span class="cat-bar-label" style="width:90px">Precision</span>
+          <div class="cat-bar-track"><div class="cat-bar-fill zone" id="m-bar-p" style="width:0%"></div></div>
+          <span class="cat-bar-count" id="m-p">—</span></div>
+        <div class="cat-bar-row"><span class="cat-bar-label" style="width:90px">Recall</span>
+          <div class="cat-bar-track"><div class="cat-bar-fill ppe" id="m-bar-r" style="width:0%"></div></div>
+          <span class="cat-bar-count" id="m-r">—</span></div>
+        <div class="text-muted text-xs" id="m-time" style="margin-top:6px"></div>
+      </div>
     </div>
   </div>
   <div id="save-msg" style="margin-top:8px;font-size:12px;color:var(--green);min-height:16px;"></div>
@@ -347,6 +379,9 @@ function showSection(name, el) {
   }
   if (name === 'data') {
     loadDataStats();
+    loadMetrics();
+    const ulm = document.getElementById('use-local-model');
+    if (ulm) ulm.checked = !!(_settings.ai && _settings.ai.use_local_model);
     const srcSel = document.getElementById('train-source');
     if (srcSel) {
       srcSel.onchange = () => {
@@ -417,6 +452,41 @@ async function loadDataStats() {
     set('ds-normal', (c.normal          ?? 0) + ' รูป');
     set('ds-total',  (d.total_images ?? 0) + ' รูป (' + (d.labeled ?? 0) + ' มี label)');
     set('ds-size',   (d.size_mb ?? 0) + ' MB');
+  } catch (_) {}
+}
+
+async function loadMetrics() {
+  let d;
+  try { d = await (await fetch('/api/training/metrics')).json(); } catch (_) { return; }
+  const empty = document.getElementById('metrics-empty');
+  const body  = document.getElementById('metrics-body');
+  if (!empty || !body) return;
+  // Prefer PPE metrics, else fall
+  const m = d.ppe || d.fall;
+  if (!m) { empty.style.display = 'block'; body.style.display = 'none'; return; }
+  empty.style.display = 'none';
+  body.style.display = 'block';
+  document.getElementById('m-task').textContent = (m.task || '').toUpperCase();
+  const pct = v => Math.round((v || 0) * 100);
+  const setBar = (id, barId, v) => {
+    document.getElementById(id).textContent = (v != null ? (v).toFixed(3) : '—');
+    document.getElementById(barId).style.width = pct(v) + '%';
+  };
+  setBar('m-map50', 'm-bar-map50', m.mAP50);
+  setBar('m-map',   'm-bar-map',   m['mAP50-95']);
+  setBar('m-p',     'm-bar-p',     m.precision);
+  setBar('m-r',     'm-bar-r',     m.recall);
+  document.getElementById('m-time').textContent = 'อัปเดต: ' + (m.timestamp || '');
+}
+
+async function setLocalModel(on) {
+  _settings.ai = _settings.ai || {};
+  _settings.ai.use_local_model = !!on;
+  try {
+    await fetch('/api/settings', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(_settings),
+    });
   } catch (_) {}
 }
 

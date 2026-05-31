@@ -348,6 +348,7 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
         "ppe_confidence": 0.70,
         "fall_bbox_ratio": 0.72,
         "fall_confirm_frames": 6,
+        "use_local_model": False,
     },
     "alerts": {
         "violation_cooldown_seconds": 30,
@@ -562,6 +563,22 @@ async def jobs_upload(body: dict[str, Any]):
 async def jobs_status():
     from server.jobs import manager as jobs
     return JSONResponse(jobs.status())
+
+
+@app.get("/api/training/metrics")
+async def training_metrics():
+    """Latest persisted training metrics (mAP/precision/recall) per task."""
+    logs_dir = ZENTRA_BACKEND / "logs"
+    out: dict[str, Any] = {}
+    if logs_dir.exists():
+        for task in ("ppe", "fall"):
+            files = sorted(logs_dir.glob(f"metrics_{task}_*.json"))
+            if files:
+                try:
+                    out[task] = json.loads(files[-1].read_text(encoding="utf-8"))
+                except Exception:
+                    pass
+    return JSONResponse(out)
 
 
 @app.post("/api/jobs/stop")
