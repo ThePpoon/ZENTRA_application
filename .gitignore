@@ -8,11 +8,24 @@ __pycache__/
 
 # ── Runtime data / artifacts ──
 data/collected/
+data/train_dataset/
 data/zones.json
+data/*.yaml
+data/*_coco.json
+datasets/
 logs/
 runs/
 models/*.pt
+*.onnx
+*.engine
 *.log
+
+# Safety net: never commit any image/weights under data/ (training frames)
+data/**/*.jpg
+data/**/*.jpeg
+data/**/*.png
 
 # ── Debug ──
 debug_*.jpg
+/yolo*.pt
+/*.pt
