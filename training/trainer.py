@@ -338,7 +338,7 @@ class ZENTRATrainer:
             save       = True,
             save_period = 10,
             resume     = resume,
-            patience   = 20,    # Early stopping
+            patience   = getattr(cfg, "TRAIN_PATIENCE", 15),    # Early stopping
             # Logging
             verbose    = True,
         )

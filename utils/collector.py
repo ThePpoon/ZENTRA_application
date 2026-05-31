@@ -37,7 +37,30 @@ class DataCollector:
         self.lock     = threading.Lock()
         self._counts: dict[str, int] = {}   # category → count
         self._frame_counter = 0
+        self._last_save_ts: dict[str, float] = {}      # category → last save time
+        self._last_thumb:  dict[str, np.ndarray] = {}  # category → 32x32 gray
         self._load_counts()
+
+    @staticmethod
+    def _thumb(frame: np.ndarray) -> np.ndarray:
+        g = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        return cv2.resize(g, (32, 32)).astype(np.float32)
+
+    def _is_diverse(self, category: str, frame: np.ndarray) -> bool:
+        """True if this frame is far enough (in time + appearance) from the last
+        saved one — avoids storing 20 near-identical frames of the same moment."""
+        cfg = self.cfg
+        now = time.time()
+        min_gap = getattr(cfg, "COLLECT_MIN_INTERVAL_SEC", 2.0)
+        if now - self._last_save_ts.get(category, 0.0) < min_gap:
+            return False
+        th = self._thumb(frame)
+        prev = self._last_thumb.get(category)
+        if prev is not None:
+            diff = float(np.mean(np.abs(th - prev)))   # mean abs pixel diff (0–255)
+            if diff < getattr(cfg, "COLLECT_DEDUP_DIFF", 8.0):
+                return False                            # too similar → skip
+        return True
 
     # ── Public API ────────────────────────────────────────────
     def collect(
@@ -60,6 +83,10 @@ class DataCollector:
         if not self.cfg.AUTO_COLLECT_FRAMES:
             return False
 
+        # Diversity gate: skip near-duplicate / too-frequent frames (better dataset)
+        if not force and not self._is_diverse(category, frame):
+            return False
+
         # Check quota
         max_q = self.cfg.COLLECT_MAX_PER_CLASS
         with self.lock:
@@ -67,6 +94,10 @@ class DataCollector:
             if not force and cnt >= max_q:
                 return False
             self._counts[category] = cnt + 1
+
+        # Remember this frame as the reference for diversity checks
+        self._last_save_ts[category] = time.time()
+        self._last_thumb[category]   = self._thumb(frame)
 
         save_dir = Path(self.cfg.COLLECTED_DIR) / category
         save_dir.mkdir(parents=True, exist_ok=True)

@@ -165,11 +165,15 @@ COLLECT_VIOLATION_FRAMES = True
 COLLECT_NORMAL_INTERVAL  = 300
 COLLECT_MAX_PER_CLASS    = 2000
 COLLECT_JPEG_QUALITY     = 90
+# Dataset quality: keep DIVERSE frames, not 30 near-identical ones per moment
+COLLECT_MIN_INTERVAL_SEC = float(os.getenv("COLLECT_MIN_INTERVAL_SEC", "2.0"))  # min gap between saves / category
+COLLECT_DEDUP_DIFF       = float(os.getenv("COLLECT_DEDUP_DIFF", "8.0"))        # skip if 32x32 gray diff < this
 
 # ================================================================
 # TRAINING
 # ================================================================
-TRAIN_EPOCHS        = int(os.getenv("TRAIN_EPOCHS",     "100"))
+TRAIN_EPOCHS        = int(os.getenv("TRAIN_EPOCHS",     "80"))
+TRAIN_PATIENCE      = int(os.getenv("TRAIN_PATIENCE",   "15"))   # early stop if no gain for N epochs
 TRAIN_BATCH_SIZE    = int(os.getenv("TRAIN_BATCH_SIZE", "16"))
 TRAIN_IMG_SIZE      = 640
 TRAIN_DEVICE        = os.getenv("TRAIN_DEVICE", "0")
