@@ -281,6 +281,8 @@ class Pipeline:
                 cfg.ZONE_COOLDOWN_SECONDS = int(alr["zone_cooldown_seconds"])
             if "fall_cooldown_seconds" in alr:
                 cfg.FALL_COOLDOWN_SECONDS = int(alr["fall_cooldown_seconds"])
+            if "upload_images" in alr:
+                cfg.LINE_UPLOAD_IMAGES = bool(alr["upload_images"])  # PDPA toggle
             line = settings.get("line", {})
             if "channel_access_token" in line:
                 cfg.LINE_OA_CHANNEL_ACCESS_TOKEN = line["channel_access_token"]

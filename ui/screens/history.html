@@ -62,13 +62,11 @@
           <button class="btn btn-ghost btn-sm" style="padding:2px 8px" title="วันถัดไป" onclick="shiftDay(-1)">▶</button>
         </div>
         <div class="event-list" id="event-list"></div>
-        <div class="event-list-footer">
-          <button class="btn btn-ghost btn-sm" onclick="loadMoreEvents()" id="load-more-btn">
-            โหลดเพิ่มเติม
-          </button>
-          <button class="btn btn-outline btn-sm" onclick="exportCSV()" style="margin-left:auto">
-            Export CSV
-          </button>
+        <div class="event-list-footer" style="flex-wrap:wrap">
+          <button class="btn btn-ghost btn-sm" onclick="loadMoreEvents()" id="load-more-btn">โหลดเพิ่ม</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportCSV()" style="margin-left:auto">CSV</button>
+          <button class="btn btn-outline btn-sm" onclick="downloadReport()">รายงาน PDF</button>
+          <button class="btn btn-primary btn-sm" onclick="sendLineReport(this)">ส่งสรุป LINE</button>
         </div>
       </div>
     </div>
@@ -259,6 +257,32 @@ function openEvidence(e) {
 function closeEvidence() {
   const ov = document.getElementById('evidence-modal');
   if (ov) ov.classList.add('hidden');
+}
+
+async function downloadReport() {
+  try {
+    const res  = await fetch('/api/report/daily.pdf' + _dayParam('?'));
+    if (!res.ok) { alert('สร้างรายงานไม่สำเร็จ'); return; }
+    const blob = await res.blob();
+    const a    = document.createElement('a');
+    a.href     = URL.createObjectURL(blob);
+    a.download = 'zentra_report' + (currentDayStr() ? '_' + currentDayStr() : '') + '.pdf';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  } catch (_) { alert('สร้างรายงานไม่สำเร็จ'); }
+}
+
+async function sendLineReport(btn) {
+  if (btn) { btn.disabled = true; btn.textContent = 'กำลังส่ง...'; }
+  let d;
+  try {
+    d = await (await fetch('/api/report/send-line', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ day: currentDayStr() }),
+    })).json();
+  } catch (_) { d = { ok: false }; }
+  if (btn) { btn.disabled = false; btn.textContent = 'ส่งสรุป LINE'; }
+  alert(d.ok ? 'ส่งสรุปเข้า LINE แล้ว' : ('ส่งไม่สำเร็จ: ' + (d.error || 'ตรวจ LINE token ใน Settings')));
 }
 
 function loadMoreEvents() { loadEvents(true); }

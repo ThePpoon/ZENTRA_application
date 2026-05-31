@@ -344,6 +344,7 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
         "warning_enabled": True,
         "alert_enabled":   True,
         "emergency_enabled": True,
+        "upload_images":   True,
     },
     "camera": {
         "source": "webcam",
@@ -460,6 +461,35 @@ async def history_export(day: str | None = None):
 async def history_clear():
     from server import store
     return JSONResponse({"ok": True, "removed": store.purge_all()})
+
+
+# ================================================================
+# DAILY REPORT  (local PDF + LINE text summary)
+# ================================================================
+@app.get("/api/report/daily.pdf")
+async def report_daily_pdf(day: str | None = None):
+    from server.report import build_daily_pdf
+    loop = asyncio.get_running_loop()
+    try:
+        path = await loop.run_in_executor(None, build_daily_pdf, day)
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
+    return FileResponse(str(path), media_type="application/pdf", filename=path.name)
+
+
+@app.post("/api/report/send-line")
+async def report_send_line(body: dict[str, Any] | None = None):
+    body = body or {}
+    day  = body.get("day")
+    try:
+        from server.report import daily_stats_for_line
+        from alerts.line_notify import send_daily_report
+        stats = daily_stats_for_line(day)
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, send_daily_report, stats)
+        return JSONResponse({"ok": True})
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)}, status_code=500)
 
 
 # ================================================================
