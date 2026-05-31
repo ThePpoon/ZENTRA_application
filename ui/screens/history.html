@@ -123,7 +123,10 @@ async function loadHourlyChart() {
   try {
     const res  = await fetch('/api/history/hourly');
     const data = await res.json();
-    const labels = Object.keys(data).slice(6, 20); // show 06-19
+    // Build labels explicitly 00..23 — do NOT use Object.keys(data) order:
+    // JS reorders integer-like string keys ("10".."23") ahead of "00".."09",
+    // which shifted the window and hid the current hour.
+    const labels = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
     const values = labels.map(h => data[h] || 0);
 
     // Light-theme axis/grid colors (slate)
