@@ -112,13 +112,23 @@ function fmtUptime(secs) {
 }
 
 async function loadHourlyChart() {
+  const canvas = document.getElementById('hourly-chart');
+  if (!canvas) return;
+  if (typeof Chart === 'undefined') {
+    // Chart.js (CDN) failed to load — show a readable fallback
+    canvas.insertAdjacentHTML('afterend',
+      '<div class="text-muted" style="text-align:center;padding:12px;font-size:12px">โหลดกราฟไม่สำเร็จ (ตรวจการเชื่อมต่ออินเทอร์เน็ต)</div>');
+    return;
+  }
   try {
     const res  = await fetch('/api/history/hourly');
     const data = await res.json();
     const labels = Object.keys(data).slice(6, 20); // show 06-19
     const values = labels.map(h => data[h] || 0);
 
-    const ctx = document.getElementById('hourly-chart').getContext('2d');
+    // Light-theme axis/grid colors (slate)
+    const TICK = '#64748b', GRID = 'rgba(15,23,42,0.08)';
+    const ctx = canvas.getContext('2d');
     if (_chart) _chart.destroy();
     _chart = new Chart(ctx, {
       type: 'bar',
@@ -126,10 +136,11 @@ async function loadHourlyChart() {
         labels,
         datasets: [{
           data: values,
-          backgroundColor: 'rgba(251, 146, 60, 0.7)',
-          borderColor: '#fb923c',
+          backgroundColor: 'rgba(37, 99, 235, 0.75)',
+          borderColor: '#2563eb',
           borderWidth: 1,
-          borderRadius: 3,
+          borderRadius: 4,
+          maxBarThickness: 26,
         }],
       },
       options: {
@@ -138,13 +149,13 @@ async function loadHourlyChart() {
         plugins: { legend: { display: false } },
         scales: {
           x: {
-            ticks: { color: 'rgba(255,255,255,0.45)', font: { size: 10, family: 'Sarabun' } },
-            grid:  { color: 'rgba(255,255,255,0.05)' },
+            ticks: { color: TICK, font: { size: 10, family: 'Sarabun' } },
+            grid:  { color: GRID, display: false },
           },
           y: {
             beginAtZero: true,
-            ticks: { color: 'rgba(255,255,255,0.45)', font: { size: 10, family: 'Sarabun' }, stepSize: 1 },
-            grid:  { color: 'rgba(255,255,255,0.05)' },
+            ticks: { color: TICK, font: { size: 10, family: 'Sarabun' }, stepSize: 1, precision: 0 },
+            grid:  { color: GRID },
           },
         },
       },

@@ -2,6 +2,15 @@
   <!-- Navigation Bar -->
   <div id="navbar-mount"></div>
 
+  <!-- KPI strip -->
+  <div class="dashboard-kpis">
+    <div class="kpi-tile"><div class="kpi-val" id="kpi-total">0</div><div class="kpi-lbl">เหตุการณ์รวมวันนี้</div></div>
+    <div class="kpi-tile" id="kpi-tile-warning"><div class="kpi-val" id="kpi-warning">0</div><div class="kpi-lbl">เฝ้าระวัง (Warning)</div></div>
+    <div class="kpi-tile" id="kpi-tile-emergency"><div class="kpi-val" id="kpi-emergency">0</div><div class="kpi-lbl">ฉุกเฉิน (Emergency)</div></div>
+    <div class="kpi-tile"><div class="kpi-val" id="kpi-uptime">0:00</div><div class="kpi-lbl">เวลาทำงาน</div></div>
+    <div class="kpi-tile"><div class="kpi-val" id="kpi-modules">0/3</div><div class="kpi-lbl">โมดูลพร้อมทำงาน</div></div>
+  </div>
+
   <div class="app-body">
     <!-- Video Feed -->
     <div class="main-content">
@@ -26,37 +35,18 @@
           <div class="module-status-list">
             <div class="module-status-row">
               <div class="status-dot ok" id="dot-ppe"></div>
-              <span class="module-name">PPE Module</span>
+              <span class="module-name">PPE Detection</span>
               <span class="module-label ok" id="lbl-ppe">ปกติ</span>
             </div>
             <div class="module-status-row">
               <div class="status-dot ok" id="dot-zone"></div>
-              <span class="module-name">Zone Module</span>
+              <span class="module-name">Safety Zone</span>
               <span class="module-label ok" id="lbl-zone">ปกติ</span>
             </div>
             <div class="module-status-row">
               <div class="status-dot ok" id="dot-fall"></div>
-              <span class="module-name">Fall Module</span>
+              <span class="module-name">Heat-Stroke / Fall</span>
               <span class="module-label ok" id="lbl-fall">ปกติ</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- Alert Counters -->
-        <div>
-          <div class="panel-section-title">สถิติ</div>
-          <div class="alert-counters">
-            <div class="alert-count-box">
-              <div class="num" id="cnt-total">0</div>
-              <div class="lbl">รวมทั้งหมด</div>
-            </div>
-            <div class="alert-count-box">
-              <div class="num" id="cnt-warning">0</div>
-              <div class="lbl">Warning</div>
-            </div>
-            <div class="alert-count-box">
-              <div class="num" id="cnt-emergency">0</div>
-              <div class="lbl">Emergency</div>
             </div>
           </div>
         </div>
@@ -72,17 +62,18 @@
           <button class="emergency-more" title="ดูรายละเอียด" onclick="ZENTRA.navigate('history')">···</button>
         </div>
 
-        <!-- Spacer + actions -->
-        <div style="margin-top: auto; display: flex; flex-direction: column; gap: 6px;">
-          <button class="btn btn-ghost btn-sm w-full" onclick="ZENTRA.navigate('zone_editor')">
-            🗺 ตั้งค่า Zone
-          </button>
-          <button class="btn btn-ghost btn-sm w-full" onclick="ZENTRA.navigate('history')">
-            📋 ดูประวัติ
-          </button>
-          <button class="btn btn-danger btn-sm w-full" id="stop-btn" onclick="stopPipeline()">
-            ⏹ หยุด / เปลี่ยนแหล่งภาพ
-          </button>
+        <!-- Alarm Priority list -->
+        <div style="flex:1; display:flex; flex-direction:column; min-height:0;">
+          <div class="panel-section-title">การแจ้งเตือนล่าสุด</div>
+          <div class="alarm-list" id="alarm-list">
+            <div class="alarm-empty" id="alarm-empty">ยังไม่มีการแจ้งเตือน</div>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <button class="btn btn-ghost btn-sm w-full" onclick="ZENTRA.navigate('zone_editor')">ตั้งค่าโซนความปลอดภัย</button>
+          <button class="btn btn-danger btn-sm w-full" id="stop-btn" onclick="stopPipeline()">หยุด / เปลี่ยนแหล่งภาพ</button>
         </div>
 
       </div>
@@ -92,25 +83,32 @@
 
 <script>
 function init_dashboard() {
-  // Inject navbar
   document.getElementById('navbar-mount').innerHTML = renderNavbar('dashboard');
-  // Set camera label
   document.getElementById('camera-label').textContent = ZENTRA.state.camera_label;
-  // Restore last video frame immediately (so the feed doesn't go blank when
-  // returning from another tab — next WS frame replaces it within ~100ms)
+
+  // Restore last video frame immediately (no blank feed when returning)
   if (ZENTRA._lastFrame) {
     const vf = document.getElementById('video-feed');
     if (vf) vf.src = ZENTRA._lastFrame;
   }
-  // Refresh status display
+
   ZENTRA._updateModuleStatus();
-  ZENTRA._updateAlertCounters();
+  ZENTRA._updateKPIs();
   ZENTRA._updateCameraState();
-  // Show emergency if any
-  if (ZENTRA.state.last_emergency) {
-    ZENTRA._showEmergencyBanner(ZENTRA.state.last_emergency);
+  if (ZENTRA.state.last_emergency) ZENTRA._showEmergencyBanner(ZENTRA.state.last_emergency);
+
+  // Seed recent alarms from history, then render
+  if (!ZENTRA.state.recentAlarms || !ZENTRA.state.recentAlarms.length) {
+    fetch('/api/history/events?limit=20').then(r => r.json()).then(d => {
+      ZENTRA.state.recentAlarms = (d.events || []).map(e => ({
+        level: e.level, message: e.message, time: e.time, camera: e.camera,
+      }));
+      ZENTRA._renderAlarms();
+    }).catch(() => ZENTRA._renderAlarms());
+  } else {
+    ZENTRA._renderAlarms();
   }
-  // Ensure WS is connected
+
   ZENTRA.connectWS();
   ZENTRA.startStatusPoll();
 }
@@ -118,9 +116,7 @@ function init_dashboard() {
 async function stopPipeline() {
   const btn = document.getElementById('stop-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'กำลังหยุด...'; }
-  try {
-    await fetch('/api/pipeline/stop', { method: 'POST' });
-  } catch (_) {}
+  try { await fetch('/api/pipeline/stop', { method: 'POST' }); } catch (_) {}
   ZENTRA.state.pipeline.running = false;
   ZENTRA.state.camera = 'disconnected';
   ZENTRA.stopStatusPoll();

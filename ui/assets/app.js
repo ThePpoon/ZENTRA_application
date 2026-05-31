@@ -13,6 +13,7 @@ const ZENTRA = {
     last_emergency: null,
     camera_label: 'Camera #1',
     camera:   'disconnected',   // connected | reconnecting | disconnected
+    recentAlarms: [],           // [{level,message,time,camera}] newest first
   },
 
   ws: null,
@@ -116,11 +117,18 @@ const ZENTRA = {
           if (lvl === 'warning' || lvl === 'alert') ZENTRA.state.alerts.warning++;
           if (lvl === 'emergency') ZENTRA.state.alerts.emergency++;
         }
+        // Push to the recent-alarms list (newest first, cap 30)
+        ZENTRA.state.recentAlarms.unshift({
+          level: lvl, message: msg.message || '', time: msg.timestamp || '', camera: msg.camera || '',
+        });
+        ZENTRA.state.recentAlarms = ZENTRA.state.recentAlarms.slice(0, 30);
         if (lvl === 'emergency') {
           ZENTRA.state.last_emergency = msg;
           ZENTRA._showEmergencyBanner(msg);
         }
         ZENTRA._updateAlertCounters();
+        ZENTRA._updateKPIs();
+        ZENTRA._renderAlarms();
         ZENTRA._updateModuleStatus();
       }
     }
@@ -149,6 +157,45 @@ const ZENTRA = {
     if (el('cnt-total'))    el('cnt-total').textContent    = a.total;
     if (el('cnt-warning'))  el('cnt-warning').textContent  = a.warning;
     if (el('cnt-emergency'))el('cnt-emergency').textContent= a.emergency;
+  },
+
+  _fmtUptime(secs) {
+    secs = secs || 0;
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    return h > 0 ? `${h}:${String(m).padStart(2,'0')}` : `${m} น.`;
+  },
+
+  _updateKPIs() {
+    const a = ZENTRA.state.alerts || {};
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    set('kpi-total',     a.total     || 0);
+    set('kpi-warning',   a.warning   || 0);
+    set('kpi-emergency', a.emergency || 0);
+    set('kpi-uptime',    ZENTRA._fmtUptime(ZENTRA.state.uptime));
+    const m = ZENTRA.state.modules || {};
+    const ok = ['ppe','zone','fall'].filter(k => m[k] === 'ok').length;
+    set('kpi-modules', `${ok}/3`);
+    // Color tiles only when there is something to show (control-room style)
+    const wt = document.getElementById('kpi-tile-warning');
+    const et = document.getElementById('kpi-tile-emergency');
+    if (wt) wt.classList.toggle('warn',  (a.warning   || 0) > 0);
+    if (et) et.classList.toggle('alarm', (a.emergency || 0) > 0);
+  },
+
+  _renderAlarms() {
+    const list = document.getElementById('alarm-list');
+    if (!list) return;
+    const items = ZENTRA.state.recentAlarms || [];
+    if (!items.length) {
+      list.innerHTML = '<div class="alarm-empty" id="alarm-empty">ยังไม่มีการแจ้งเตือน</div>';
+      return;
+    }
+    list.innerHTML = items.map(it => `
+      <div class="alarm-item ${it.level || 'warning'}">
+        <div class="a-msg">${(it.message || '').replace(/</g,'&lt;')}</div>
+        <div class="a-meta">${it.time || ''}${it.camera ? ' · ' + it.camera : ''}</div>
+      </div>`).join('');
   },
 
   _updateCameraState() {
@@ -194,6 +241,7 @@ const ZENTRA = {
         if (data.camera) ZENTRA.state.camera = data.camera;
         ZENTRA._updateModuleStatus();
         ZENTRA._updateAlertCounters();
+        ZENTRA._updateKPIs();
         ZENTRA._updateCameraState();
       } catch (_) {}
     }, 2000);
@@ -226,12 +274,7 @@ function renderNavbar(activeTab) {
   return `
     <nav class="navbar">
       <div class="navbar-brand">
-        <img class="brand-logo" src="/ui/assets/logo.png"
-             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
-             alt="ZENTRA">
-        <div style="display:none;width:28px;height:28px;background:linear-gradient(135deg,#2563eb,#1d4ed8);
-                    clip-path:polygon(50% 0%,100% 38%,82% 100%,18% 100%,0% 38%);
-                    border-radius:2px;"></div>
+        <span class="brand-mark">Z</span>
         <div>
           <span class="brand-text">ZENTRA</span>
           <span class="brand-sub">Safety AI System</span>
