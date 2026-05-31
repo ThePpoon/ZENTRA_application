@@ -64,6 +64,9 @@ const ZENTRA = {
       // Call the screen's init function (now globally defined)
       const fn = window[`init_${screenId}`];
       if (typeof fn === 'function') fn(params);
+
+      // Keep the header clock/status pill running on screens that have a navbar
+      ZENTRA.startHeaderClock();
     } catch (e) {
       console.error('[ZENTRA] navigate error:', screenId, e);
     }
@@ -225,7 +228,7 @@ function renderNavbar(activeTab) {
         <img class="brand-logo" src="/ui/assets/logo.png"
              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"
              alt="ZENTRA">
-        <div style="display:none;width:28px;height:28px;background:linear-gradient(135deg,#7ecfff,#9d4edd);
+        <div style="display:none;width:28px;height:28px;background:linear-gradient(135deg,#2563eb,#1d4ed8);
                     clip-path:polygon(50% 0%,100% 38%,82% 100%,18% 100%,0% 38%);
                     border-radius:2px;"></div>
         <div>
@@ -234,8 +237,41 @@ function renderNavbar(activeTab) {
         </div>
       </div>
       <div class="navbar-tabs">${tabsHtml}</div>
+      <div class="navbar-status">
+        <span class="nav-clock" id="nav-clock">--:--:--</span>
+        <span class="sys-pill ok" id="sys-pill"><span class="sys-dot"></span><span id="sys-pill-text">ระบบปกติ</span></span>
+      </div>
     </nav>`;
 }
+
+/* ─── Header clock + system-status pill ───────────── */
+ZENTRA._headerTimer = null;
+ZENTRA.startHeaderClock = function () {
+  if (ZENTRA._headerTimer) return;
+  const tick = () => {
+    const el = document.getElementById('nav-clock');
+    if (el) {
+      const d = new Date();
+      el.textContent = d.toLocaleTimeString('th-TH', { hour12: false });
+    }
+    ZENTRA._updateSysPill();
+  };
+  tick();
+  ZENTRA._headerTimer = setInterval(tick, 1000);
+};
+ZENTRA._updateSysPill = function () {
+  const pill = document.getElementById('sys-pill');
+  const txt  = document.getElementById('sys-pill-text');
+  if (!pill || !txt) return;
+  const a = ZENTRA.state.alerts || {};
+  const cam = ZENTRA.state.camera;
+  let cls = 'ok', label = 'ระบบปกติ';
+  if (cam === 'reconnecting' || cam === 'disconnected') { cls = 'warn'; label = 'กล้องไม่พร้อม'; }
+  if ((a.emergency || 0) > 0)                            { cls = 'alarm'; label = 'เหตุฉุกเฉิน'; }
+  else if ((a.warning || 0) > 0)                          { cls = 'warn';  label = 'มีการแจ้งเตือน'; }
+  pill.className = 'sys-pill ' + cls;
+  txt.textContent = label;
+};
 
 /* ─── Init ─────────────────────────────────────── */
 if (document.readyState === 'loading') {
