@@ -95,6 +95,7 @@ const ZENTRA = {
   _handleWsMsg(msg) {
     if (msg.type === 'frame') {
       ZENTRA._lastFrame = 'data:image/jpeg;base64,' + msg.data;
+      ZENTRA._lastFrameAt = Date.now();
       const el = document.getElementById('video-feed');
       if (el) el.src = ZENTRA._lastFrame;
     }
@@ -243,6 +244,18 @@ const ZENTRA = {
         ZENTRA._updateAlertCounters();
         ZENTRA._updateKPIs();
         ZENTRA._updateCameraState();
+
+        // Watchdog: pipeline running but no video frame for >6s → the WS
+        // stalled; force a reconnect so the live view self-heals.
+        if (data.running && document.getElementById('video-feed')) {
+          const since = Date.now() - (ZENTRA._lastFrameAt || 0);
+          if (since > 6000) {
+            try { if (ZENTRA.ws) ZENTRA.ws.close(); } catch (_) {}
+            ZENTRA.ws = null;
+            ZENTRA.connectWS();
+            ZENTRA._lastFrameAt = Date.now();   // grace period before next retry
+          }
+        }
       } catch (_) {}
     }, 2000);
   },
