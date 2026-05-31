@@ -55,7 +55,12 @@
 
       <!-- Right: events list -->
       <div class="history-right">
-        <div class="event-list-header">บันทึกเหตุการณ์</div>
+        <div class="event-list-header" style="display:flex;align-items:center;gap:6px">
+          <span>บันทึกเหตุการณ์</span>
+          <span id="hist-date" style="margin-left:auto;font-weight:600;color:var(--text-sub);font-size:11px;text-transform:none;letter-spacing:0">วันนี้</span>
+          <button class="btn btn-ghost btn-sm" style="padding:2px 8px" title="วันก่อนหน้า" onclick="shiftDay(1)">◀</button>
+          <button class="btn btn-ghost btn-sm" style="padding:2px 8px" title="วันถัดไป" onclick="shiftDay(-1)">▶</button>
+        </div>
         <div class="event-list" id="event-list"></div>
         <div class="event-list-footer">
           <button class="btn btn-ghost btn-sm" onclick="loadMoreEvents()" id="load-more-btn">
@@ -69,12 +74,46 @@
     </div>
 
   </div>
+
+  <!-- Evidence modal -->
+  <div class="modal-overlay hidden" id="evidence-modal" onclick="if(event.target===this)closeEvidence()">
+    <div class="modal-box">
+      <div class="modal-head">
+        <span class="event-badge ppe" id="ev-badge">PPE</span>
+        <span class="modal-title" id="ev-msg">—</span>
+        <button class="modal-close" onclick="closeEvidence()">✕</button>
+      </div>
+      <div class="modal-meta" id="ev-meta"></div>
+      <div class="modal-img-wrap">
+        <img id="ev-img" alt="ภาพหลักฐาน">
+        <div id="ev-nosnap" class="alarm-empty" style="display:none">ไม่มีภาพหลักฐานสำหรับเหตุการณ์นี้</div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
 var _eventsOffset = 0;
 var _chart = null;
+var _dayOffset = 0;   // 0 = today, N = N days ago
+
+function currentDayStr() {
+  if (_dayOffset <= 0) return null;          // today
+  const d = new Date(); d.setDate(d.getDate() - _dayOffset);
+  return d.toISOString().slice(0, 10);
+}
+function _dayParam(sep) {
+  const d = currentDayStr();
+  return d ? `${sep}day=${d}` : '';
+}
+function shiftDay(delta) {
+  _dayOffset = Math.max(0, _dayOffset + delta);   // can't go into the future
+  const lbl = document.getElementById('hist-date');
+  if (lbl) lbl.textContent = _dayOffset === 0 ? 'วันนี้' : `${currentDayStr()} (${_dayOffset} วันก่อน)`;
+  _eventsOffset = 0;
+  loadTodayStats(); loadHourlyChart(); loadEvents();
+}
 
 function init_history() {
   document.getElementById('navbar-mount').innerHTML = renderNavbar('history');
@@ -85,7 +124,7 @@ function init_history() {
 
 async function loadTodayStats() {
   try {
-    const res  = await fetch('/api/history/today');
+    const res  = await fetch('/api/history/today' + _dayParam('?'));
     const data = await res.json();
     document.getElementById('stat-total').textContent    = data.total;
     document.getElementById('stat-emergency').textContent= data.emergency;
@@ -121,7 +160,7 @@ async function loadHourlyChart() {
     return;
   }
   try {
-    const res  = await fetch('/api/history/hourly');
+    const res  = await fetch('/api/history/hourly' + _dayParam('?'));
     const data = await res.json();
     // Build labels explicitly 00..23 — do NOT use Object.keys(data) order:
     // JS reorders integer-like string keys ("10".."23") ahead of "00".."09",
@@ -168,22 +207,27 @@ async function loadHourlyChart() {
 
 async function loadEvents(append = false) {
   try {
-    const res  = await fetch(`/api/history/events?limit=20&offset=${_eventsOffset}`);
+    const res  = await fetch(`/api/history/events?limit=20&offset=${_eventsOffset}` + _dayParam('&'));
     const data = await res.json();
     const list = document.getElementById('event-list');
 
     if (!append) list.innerHTML = '';
+    if (!append && !data.events.length) {
+      list.innerHTML = '<div class="alarm-empty">ไม่มีเหตุการณ์ในวันนี้</div>';
+    }
 
     for (const e of data.events) {
       const div = document.createElement('div');
       div.className = 'event-item';
+      div.onclick = () => openEvidence(e);
       div.innerHTML = `
         <div class="event-type-row">
           <span class="event-badge ${e.type}">${e.type.toUpperCase()}</span>
-          <span class="event-desc">${e.message}</span>
+          <span class="event-desc">${(e.message||'').replace(/</g,'&lt;')}</span>
+          ${e.has_snapshot ? '<span title="มีภาพหลักฐาน" style="margin-left:auto">📷</span>' : ''}
         </div>
         <div class="event-meta">
-          ${e.time} · ${e.camera}${e.track ? ' · ' + e.track : ''}
+          ${e.time} · ${e.camera}
           ${e.line_sent ? ' · <span style="color:var(--green);font-size:10px">LINE ส่งแล้ว</span>' : ''}
         </div>`;
       list.appendChild(div);
@@ -195,11 +239,33 @@ async function loadEvents(append = false) {
   } catch (_) {}
 }
 
+function openEvidence(e) {
+  const ov = document.getElementById('evidence-modal');
+  if (!ov) return;
+  document.getElementById('ev-badge').className = 'event-badge ' + e.type;
+  document.getElementById('ev-badge').textContent = (e.type || '').toUpperCase();
+  document.getElementById('ev-msg').textContent  = e.message || '';
+  document.getElementById('ev-meta').textContent = `${e.date || ''} ${e.time || ''} · ${e.camera || ''}`;
+  const img = document.getElementById('ev-img');
+  const non = document.getElementById('ev-nosnap');
+  if (e.has_snapshot) {
+    img.src = '/api/history/snapshot/' + e.id + '?t=' + Date.now();
+    img.style.display = 'block'; non.style.display = 'none';
+  } else {
+    img.style.display = 'none'; non.style.display = 'block';
+  }
+  ov.classList.remove('hidden');
+}
+function closeEvidence() {
+  const ov = document.getElementById('evidence-modal');
+  if (ov) ov.classList.add('hidden');
+}
+
 function loadMoreEvents() { loadEvents(true); }
 
 async function exportCSV() {
   try {
-    const res = await fetch('/api/history/export.csv');
+    const res = await fetch('/api/history/export.csv' + _dayParam('?'));
     const csv = await res.text();
     try {
       await window.pywebview.api.save_file(csv, 'zentra_history.csv');

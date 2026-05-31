@@ -5,4 +5,8 @@ __pycache__/
 data/settings.json
 data/collected/
 data/logs/
+data/snapshots/
+data/reports/
+data/zentra.db
+*.db
 *.log

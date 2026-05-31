@@ -76,30 +76,8 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-# ================================================================
-# IN-MEMORY EVENT HISTORY
-# ================================================================
-_event_history: deque[dict] = deque(maxlen=500)
-_event_id_counter = 0
-
-
-def _add_event(msg: str, level: str) -> dict:
-    global _event_id_counter
-    _event_id_counter += 1
-    # Infer type from level
-    type_map = {"warning": "ppe", "alert": "zone", "emergency": "fall"}
-    event = {
-        "id":        _event_id_counter,
-        "type":      type_map.get(level, "ppe"),
-        "level":     level,
-        "message":   msg.split("\n")[0] if msg else level,
-        "time":      datetime.now().strftime("%H:%M:%S"),
-        "camera":    "Cam 1",
-        "track":     None,
-        "line_sent": True,
-    }
-    _event_history.appendleft(event)
-    return event
+# Events are persisted locally via server/store.py (SQLite + snapshot files);
+# nothing is kept only in memory and nothing leaves the device (PDPA).
 
 
 # ================================================================
@@ -120,18 +98,27 @@ async def _startup():
 
         # Wire alert callback → WebSocket broadcast + history
         def _on_alert(msg: str, level: str):
-            event = _add_event(msg, level)
+            # Capture an evidence snapshot (local only) of the current frame
+            snap = None
+            try:
+                snap = pipeline.get_snapshot() if pipeline else None
+            except Exception:
+                snap = None
+            from server import store
+            event = store.add_event(level=level, message=msg, camera="Cam 1", frame_jpeg=snap)
             # Authoritative counts from the pipeline (avoids client drift)
             with pipeline._lock:
                 alerts = dict(pipeline.status.get("alerts", {}))
             broadcast_msg = {
-                "type":      "event",
-                "event":     "alert",
-                "level":     level,
-                "message":   event["message"],
-                "timestamp": event["time"],
-                "camera":    "Cam 1",
-                "alerts":    alerts,
+                "type":         "event",
+                "event":        "alert",
+                "id":           event["id"],
+                "level":        level,
+                "message":      event["message"],
+                "timestamp":    event["time"],
+                "camera":       "Cam 1",
+                "alerts":       alerts,
+                "has_snapshot": event["has_snapshot"],
             }
             asyncio.run_coroutine_threadsafe(
                 manager.broadcast(broadcast_msg), _loop
@@ -422,62 +409,57 @@ async def frame_snapshot():
 
 
 # ================================================================
-# HISTORY
+# HISTORY  (backed by local SQLite store — PDPA: on-device)
 # ================================================================
 @app.get("/api/history/today")
-async def history_today():
-    events = list(_event_history)
-    total     = len(events)
-    emergency = sum(1 for e in events if e["level"] == "emergency")
-    ppe_v     = sum(1 for e in events if e["type"] == "ppe")
-    zone_i    = sum(1 for e in events if e["type"] == "zone")
-    falls     = sum(1 for e in events if e["type"] == "fall")
-    uptime    = pipeline.get_uptime() if pipeline else 0
-    return JSONResponse({
-        "total":          total,
-        "emergency":      emergency,
-        "ppe_violations": ppe_v,
-        "zone_intrusions":zone_i,
-        "falls":          falls,
-        "uptime_seconds": uptime,
-    })
+async def history_today(day: str | None = None):
+    from server import store
+    s = store.today_stats(day)
+    s["uptime_seconds"] = pipeline.get_uptime() if pipeline else 0
+    return JSONResponse(s)
 
 
 @app.get("/api/history/hourly")
-async def history_hourly():
-    hourly = {str(h).zfill(2): 0 for h in range(24)}
-    for e in _event_history:
-        hh = e["time"][:2]
-        if hh in hourly:
-            hourly[hh] += 1
-    return JSONResponse(hourly)
+async def history_hourly(day: str | None = None):
+    from server import store
+    return JSONResponse(store.hourly(day))
 
 
 @app.get("/api/history/events")
-async def history_events(limit: int = 20, offset: int = 0):
-    events = list(_event_history)
-    page   = events[offset: offset + limit]
-    return JSONResponse({
-        "events":   page,
-        "total":    len(events),
-        "has_more": (offset + limit) < len(events),
-    })
+async def history_events(limit: int = 20, offset: int = 0, day: str | None = None):
+    from server import store
+    return JSONResponse(store.list_events(limit=limit, offset=offset, day=day))
+
+
+@app.get("/api/history/days")
+async def history_days():
+    from server import store
+    return JSONResponse({"days": store.available_days()})
+
+
+@app.get("/api/history/snapshot/{event_id}")
+async def history_snapshot(event_id: int):
+    from server import store
+    p = store.snapshot_path(event_id)
+    if p:
+        return FileResponse(str(p), media_type="image/jpeg")
+    return StreamingResponse(iter([_DARK_PNG]), media_type="image/png")
 
 
 @app.get("/api/history/export.csv")
-async def history_export():
-    lines = ["id,type,level,message,time,camera,track,line_sent"]
-    for e in _event_history:
-        msg = e["message"].replace(",", " ")
-        lines.append(
-            f"{e['id']},{e['type']},{e['level']},{msg},"
-            f"{e['time']},{e['camera']},{e.get('track','')},{e['line_sent']}"
-        )
+async def history_export(day: str | None = None):
+    from server import store
     return StreamingResponse(
-        iter(["\n".join(lines)]),
+        iter([store.export_csv(day)]),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=zentra_history.csv"},
     )
+
+
+@app.post("/api/history/clear")
+async def history_clear():
+    from server import store
+    return JSONResponse({"ok": True, "removed": store.purge_all()})
 
 
 # ================================================================
