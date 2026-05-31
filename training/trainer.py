@@ -259,6 +259,7 @@ class ZENTRATrainer:
         """
         preparer = DatasetPreparer()
 
+        used_roboflow = bool(roboflow_zip or roboflow_project)
         if roboflow_zip:
             yaml_path = preparer.prepare_from_roboflow_zip(roboflow_zip)
         elif roboflow_project:
@@ -266,7 +267,9 @@ class ZENTRATrainer:
         else:
             yaml_path = preparer.prepare_from_collected()
 
-        if augment:
+        # Roboflow already applies augmentation when generating the version, and
+        # its data lives in roboflow_dl/ — so only augment the locally-prepared set.
+        if augment and not used_roboflow:
             preparer.augment_dataset(aug_multiplier)
 
         return yaml_path
