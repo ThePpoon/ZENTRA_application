@@ -93,8 +93,9 @@ const ZENTRA = {
 
   _handleWsMsg(msg) {
     if (msg.type === 'frame') {
+      ZENTRA._lastFrame = 'data:image/jpeg;base64,' + msg.data;
       const el = document.getElementById('video-feed');
-      if (el) el.src = 'data:image/jpeg;base64,' + msg.data;
+      if (el) el.src = ZENTRA._lastFrame;
     }
     if (msg.type === 'event') {
       if (msg.event === 'status' || msg.modules) {

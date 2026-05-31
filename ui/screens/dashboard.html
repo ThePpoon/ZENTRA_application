@@ -96,6 +96,12 @@ function init_dashboard() {
   document.getElementById('navbar-mount').innerHTML = renderNavbar('dashboard');
   // Set camera label
   document.getElementById('camera-label').textContent = ZENTRA.state.camera_label;
+  // Restore last video frame immediately (so the feed doesn't go blank when
+  // returning from another tab — next WS frame replaces it within ~100ms)
+  if (ZENTRA._lastFrame) {
+    const vf = document.getElementById('video-feed');
+    if (vf) vf.src = ZENTRA._lastFrame;
+  }
   // Refresh status display
   ZENTRA._updateModuleStatus();
   ZENTRA._updateAlertCounters();
