@@ -127,7 +127,49 @@ class DatasetPreparer:
             overwrite=True,
         )
         print(f"[Trainer] Downloaded: {ds.location}")
-        return ds.location + "/data.yaml"
+        return self._finalize_yolo_dataset(ds.location)
+
+    @staticmethod
+    def _finalize_yolo_dataset(location: str) -> str:
+        """Make a Roboflow YOLOv8 export trainable regardless of how the version
+        was generated: write ABSOLUTE paths (avoids ultralytics datasets_dir
+        confusion) and create a val split if the export has none."""
+        loc = Path(location)
+        yml = loc / "data.yaml"
+        d   = yaml.safe_load(yml.read_text()) if yml.exists() else {}
+        names = d.get("names", [])
+
+        train_img = loc / "train" / "images"
+        train_lbl = loc / "train" / "labels"
+        valid_img = loc / "valid" / "images"
+        valid_lbl = loc / "valid" / "labels"
+
+        has_valid = valid_img.exists() and any(valid_img.glob("*.*"))
+        if not has_valid and train_img.exists():
+            valid_img.mkdir(parents=True, exist_ok=True)
+            valid_lbl.mkdir(parents=True, exist_ok=True)
+            imgs = sorted(p for p in train_img.glob("*")
+                          if p.suffix.lower() in (".jpg", ".jpeg", ".png"))
+            random.seed(0)
+            random.shuffle(imgs)
+            n_val = max(1, int(len(imgs) * 0.2))
+            for p in imgs[:n_val]:
+                shutil.move(str(p), str(valid_img / p.name))
+                lp = train_lbl / f"{p.stem}.txt"
+                if lp.exists():
+                    shutil.move(str(lp), str(valid_lbl / lp.name))
+            print(f"[Trainer] No val split in export → carved {n_val} images for validation")
+
+        out = {
+            "path":  str(loc.resolve()),
+            "train": "train/images",
+            "val":   "valid/images",
+            "nc":    d.get("nc", len(names)),
+            "names": names,
+        }
+        yml.write_text(yaml.safe_dump(out, allow_unicode=True, sort_keys=False))
+        print(f"[Trainer] data.yaml normalised (absolute path, {out['nc']} classes)")
+        return str(yml)
 
     # ── Augmentation (offline) ───────────────────────────────
     def augment_dataset(self, multiplier: int = 3):
