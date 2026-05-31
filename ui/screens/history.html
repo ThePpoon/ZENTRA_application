@@ -260,15 +260,27 @@ function closeEvidence() {
 }
 
 async function downloadReport() {
+  const fname = 'zentra_report' + (currentDayStr() ? '_' + currentDayStr() : '') + '.pdf';
   try {
-    const res  = await fetch('/api/report/daily.pdf' + _dayParam('?'));
+    const res = await fetch('/api/report/daily.pdf' + _dayParam('?'));
     if (!res.ok) { alert('สร้างรายงานไม่สำเร็จ'); return; }
-    const blob = await res.blob();
-    const a    = document.createElement('a');
-    a.href     = URL.createObjectURL(blob);
-    a.download = 'zentra_report' + (currentDayStr() ? '_' + currentDayStr() : '') + '.pdf';
-    a.click();
-    URL.revokeObjectURL(a.href);
+    const buf = await res.arrayBuffer();
+
+    // Preferred: native Save dialog via pywebview (WebView2 blocks blob downloads)
+    try {
+      const bytes = new Uint8Array(buf);
+      let bin = '';
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      const b64 = btoa(bin);
+      const saved = await window.pywebview.api.save_binary(b64, fname);
+      if (saved) alert('บันทึกรายงานแล้ว:\n' + saved);
+      return;
+    } catch (_) {
+      // Fallback for plain browser
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }));
+      a.download = fname; a.click(); URL.revokeObjectURL(a.href);
+    }
   } catch (_) { alert('สร้างรายงานไม่สำเร็จ'); }
 }
 

@@ -62,6 +62,32 @@ class JsApi:
             Path(path).write_text(content, encoding="utf-8-sig")
         return path or ""
 
+    def save_binary(self, b64_content: str, filename: str):
+        """Open a native Save dialog and write base64-decoded bytes (PDF, etc.).
+        WebView2 does not reliably trigger blob downloads, so binary files are
+        saved through this bridge instead."""
+        import base64
+        import tkinter as tk
+        from tkinter import filedialog
+        ext = ("." + filename.rsplit(".", 1)[-1]) if "." in filename else ""
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        path = filedialog.asksaveasfilename(
+            title="บันทึกไฟล์",
+            defaultextension=ext,
+            initialfile=filename,
+            filetypes=[("PDF", "*.pdf"), ("All files", "*.*")],
+        )
+        root.destroy()
+        if path:
+            try:
+                Path(path).write_bytes(base64.b64decode(b64_content))
+            except Exception as e:
+                print(f"[JsApi] save_binary error: {e}")
+                return ""
+        return path or ""
+
     def toggle_fullscreen(self):
         if webview.windows:
             webview.windows[0].toggle_fullscreen()
