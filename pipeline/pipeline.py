@@ -67,15 +67,39 @@ class _FrameReader(threading.Thread):
 # ================================================================
 # LIGHTWEIGHT INFERENCE WORKER (mirrors main.py's InferenceWorker)
 # ================================================================
+def _yolo_to_roboflow(result, conf_min: float = 0.0) -> list[dict]:
+    """Convert an ultralytics Results object → Roboflow-style prediction dicts
+    (class/confidence/x/y/width/height) so the existing modules work unchanged.
+    Class names are lower-cased to match config.PPE_CLASSES keys."""
+    preds = []
+    names = getattr(result, "names", {})
+    for b in result.boxes:
+        c = float(b.conf[0])
+        if c < conf_min:
+            continue
+        cid = int(b.cls[0])
+        x1, y1, x2, y2 = (float(v) for v in b.xyxy[0].tolist())
+        preds.append({
+            "class": str(names.get(cid, cid)).lower(),
+            "confidence": c,
+            "x": (x1 + x2) / 2.0, "y": (y1 + y2) / 2.0,
+            "width": x2 - x1, "height": y2 - y1,
+        })
+    return preds
+
+
 class _InferenceWorker(threading.Thread):
-    def __init__(self, client, ppe_id: str, fall_id: str):
+    def __init__(self, client, ppe_id: str, fall_id: str,
+                 local_ppe=None, conf: float = 0.4):
         super().__init__(daemon=True, name="InferenceWorker")
-        self.client  = client
-        self.ppe_id  = ppe_id
-        self.fall_id = fall_id
-        self.in_q    = queue.Queue(maxsize=2)
-        self.out_q   = queue.Queue(maxsize=4)
-        self._stop   = threading.Event()
+        self.client    = client
+        self.ppe_id    = ppe_id
+        self.fall_id   = fall_id
+        self.local_ppe = local_ppe        # ultralytics YOLO model, or None
+        self.conf      = conf
+        self.in_q      = queue.Queue(maxsize=2)
+        self.out_q     = queue.Queue(maxsize=4)
+        self._stop     = threading.Event()
 
     def run(self):
         while not self._stop.is_set():
@@ -85,11 +109,21 @@ class _InferenceWorker(threading.Thread):
                 continue
             try:
                 ppe_preds, fall_preds = [], []
-                if self.client:
+                if self.local_ppe is not None:
+                    # PPE from the locally fine-tuned YOLOv8 model
+                    r = self.local_ppe.predict(frame, conf=self.conf, verbose=False)
+                    if r:
+                        ppe_preds = _yolo_to_roboflow(r[0])
+                elif self.client:
                     r1 = self.client.infer(frame, model_id=self.ppe_id)
                     ppe_preds = r1.get("predictions", [])
-                    r2 = self.client.infer(frame, model_id=self.fall_id)
-                    fall_preds = r2.get("predictions", [])
+                # Fall always via the Roboflow server (MediaPipe pose also covers it)
+                if self.client:
+                    try:
+                        r2 = self.client.infer(frame, model_id=self.fall_id)
+                        fall_preds = r2.get("predictions", [])
+                    except Exception:
+                        fall_preds = []
                 self.out_q.put((fid, ppe_preds, fall_preds))
             except Exception as e:
                 print(f"[Inference] {e}")
@@ -151,6 +185,7 @@ class Pipeline:
             "alerts":         {"total": 0, "warning": 0, "emergency": 0},
             "uptime_seconds": 0,
             "last_emergency": None,
+            "ppe_model":      "cloud",   # cloud (Roboflow) | local (fine-tuned)
         }
 
     # ── Public API ────────────────────────────────────────────
@@ -413,6 +448,25 @@ class Pipeline:
         except Exception as e:
             print(f"[Pipeline] infer config skipped: {e}")
 
+    def _load_local_ppe(self):
+        """Load the locally fine-tuned PPE model when the user opted for it.
+        Returns an ultralytics YOLO model, or None to use the Roboflow server."""
+        import config as cfg
+        if not getattr(cfg, "USE_LOCAL_MODEL", False):
+            return None
+        path = Path(cfg.PPE_LOCAL_MODEL)
+        if not path.exists():
+            print(f"[Pipeline] USE_LOCAL_MODEL on but {path} missing → using Roboflow model")
+            return None
+        try:
+            from ultralytics import YOLO
+            model = YOLO(str(path))
+            print(f"[Pipeline] 🧠 PPE = local fine-tuned model: {path.name}")
+            return model
+        except Exception as e:
+            print(f"[Pipeline] local model load failed ({e}) → using Roboflow model")
+            return None
+
     def _make_client(self):
         try:
             from inference_sdk import InferenceHTTPClient
@@ -481,11 +535,20 @@ class Pipeline:
 
             client, ppe_id, fall_id = self._make_client()
 
+            # PPE source: locally fine-tuned model (toggle) vs Roboflow server
+            local_ppe = self._load_local_ppe()
+            with self._lock:
+                self.status["ppe_model"] = "local" if local_ppe is not None else "cloud"
+
             reader     = _FrameReader(self._cap)
             reader.start()
             self._reader = reader
 
-            inf_worker = _InferenceWorker(client, ppe_id, fall_id)
+            inf_worker = _InferenceWorker(
+                client, ppe_id, fall_id,
+                local_ppe=local_ppe,
+                conf=float(getattr(cfg, "INFERENCE_CONFIDENCE", 0.4)),
+            )
             inf_worker.start()
             self._inf_wkr = inf_worker
 
