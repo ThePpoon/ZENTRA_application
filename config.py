@@ -113,6 +113,14 @@ BYTETRACK_MATCH_THRESH = 0.80
 # ================================================================
 ZONE_POLYGON_FILE = str(DATA_DIR / "zones.json")
 MAX_ZONES         = 10
+ZONE_USE_FOOT_POINT = os.getenv("ZONE_USE_FOOT_POINT", "true").lower() == "true"  # test feet, not bbox centre
+ZONE_TRACK_MIN_HITS = int(os.getenv("ZONE_TRACK_MIN_HITS", "3"))   # ignore unstable tracks
+ZONE_CONFIRM_FRAMES = int(os.getenv("ZONE_CONFIRM_FRAMES", "3"))   # debounce intrusion
+
+# ================================================================
+# PPE — accuracy / debounce
+# ================================================================
+PPE_CONFIRM_FRAMES = int(os.getenv("PPE_CONFIRM_FRAMES", "3"))     # consecutive frames before alerting
 
 # ================================================================
 # ALERT COOLDOWN — Slide: 3 ระดับ

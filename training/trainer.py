@@ -502,6 +502,23 @@ def run_training_pipeline(
     model_path = trainer.train(yaml_path)
     metrics    = trainer.validate(yaml_path, model_path)
 
+    # Persist metrics so the app can display model accuracy (NSC proof)
+    if metrics:
+        try:
+            cfg = _cfg()
+            ts  = datetime.now().strftime("%Y%m%d_%H%M%S")
+            out = {
+                "timestamp":  ts,
+                "task":       task,
+                "model_path": model_path,
+                **metrics,
+            }
+            mfile = Path(cfg.LOGS_DIR) / f"metrics_{task}_{ts}.json"
+            mfile.write_text(json.dumps(out, indent=2))
+            print(f"[Trainer] Metrics saved → {mfile}")
+        except Exception as e:
+            print(f"[Trainer] metrics save failed: {e}")
+
     if export_onnx:
         trainer.export(model_path, formats=["onnx"])
 

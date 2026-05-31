@@ -29,6 +29,7 @@ _tracker = ByteTracker(
 
 stats        = {"intrusions": 0, "alerts_sent": 0}
 _last_alert: float = 0.0
+_intrusion_streak: int = 0   # consecutive frames with an intruder (debounce)
 
 ZONE_COLORS = [
     (0, 0, 220), (220, 0, 0), (180, 0, 220),
@@ -185,7 +186,7 @@ def on_frame(frame: np.ndarray, metadata, window_title: str):
 # ON_DATA — ByteTrack + zone check
 # ================================================================
 def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
-    global _last_alert
+    global _last_alert, _intrusion_streak
 
     ready_zones = [z for z in zones if z.get("ready")]
     if not ready_zones:
@@ -198,15 +199,30 @@ def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
     if frame is not None:
         draw_tracks(frame, tracks)
 
+    use_foot = getattr(cfg, "ZONE_USE_FOOT_POINT", True)
+    min_hits = getattr(cfg, "ZONE_TRACK_MIN_HITS", 3)
+
     intruders = []
     for t in tracks:
-        cx, cy = t.center
+        # Only count stable tracks (ignore brand-new / flickering detections)
+        if len(getattr(t, "history", [])) < min_hits:
+            continue
+        if use_foot:
+            x1, y1, x2, y2 = t.bbox
+            px, py = (x1 + x2) / 2.0, float(y2)   # foot point = bottom-centre
+        else:
+            px, py = t.center
         for zone in ready_zones:
-            if _is_inside(zone, cx, cy):
+            if _is_inside(zone, px, py):
                 intruders.append({"track_id": t.track_id, "zone": zone["name"]})
                 break
 
+    # Debounce: require N consecutive frames with an intruder before alerting
     if not intruders:
+        _intrusion_streak = 0
+        return
+    _intrusion_streak += 1
+    if _intrusion_streak < getattr(cfg, "ZONE_CONFIRM_FRAMES", 3):
         return
 
     stats["intrusions"] += len(intruders)

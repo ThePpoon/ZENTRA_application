@@ -21,6 +21,7 @@ stats = {
     "start_time":  time.time(),
 }
 _last_alert: float = 0.0
+_violation_streak: int = 0   # consecutive frames with a violation (debounce)
 
 
 # ================================================================
@@ -97,7 +98,7 @@ def on_frame(frame: np.ndarray, metadata, window_title: str):
 # ON_DATA — violation detection + alert
 # ================================================================
 def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
-    global _last_alert
+    global _last_alert, _violation_streak
 
     predictions: list[dict] = (
         data.get("predictions") or
@@ -106,6 +107,7 @@ def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
 
     # Normal frame collection
     if not predictions:
+        _violation_streak = 0
         if frame is not None:
             get_collector().collect_normal(frame, [], metadata.frame_id)
         return
@@ -117,11 +119,19 @@ def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
         print(f"[PPE] Frame {metadata.frame_id}: {detected}")
 
     if not violations:
+        _violation_streak = 0
         if frame is not None:
             get_collector().collect_normal(frame, predictions, metadata.frame_id)
         return
 
-    # Violation found
+    # Debounce: require N consecutive violation frames before confirming
+    # (one-frame misdetections no longer raise a false alarm)
+    _violation_streak += 1
+    confirm = getattr(cfg, "PPE_CONFIRM_FRAMES", 3)
+    if _violation_streak < confirm:
+        return
+
+    # Confirmed violation
     stats["violations"] += 1
     missing_en = ", ".join(sorted({_info(v)["label"]    for v in violations}))
     missing_th = ", ".join(sorted({_info(v)["label_th"] for v in violations}))
