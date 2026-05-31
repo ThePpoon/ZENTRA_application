@@ -114,6 +114,10 @@ def send_line_notify(
 ) -> bool:
     cfg = _cfg()
 
+    # PDPA: optionally keep person images on-device (text-only LINE alert)
+    if not getattr(cfg, "LINE_UPLOAD_IMAGES", True):
+        image = None
+
     # เลือก cooldown ตาม level
     if cooldown_sec is None:
         if level == cfg.ALERT_LEVEL_EMERGENCY:

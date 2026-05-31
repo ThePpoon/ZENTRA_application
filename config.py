@@ -154,6 +154,8 @@ ALERT_RECIPIENTS: dict[str, list[str]] = {
 
 DAILY_REPORT_TIME = os.getenv("DAILY_REPORT_TIME", "20:00")
 IMAGE_UPLOAD_URL  = "https://catbox.moe/user/api.php"
+# PDPA: when False, LINE alerts are text-only (no person image leaves the device)
+LINE_UPLOAD_IMAGES = os.getenv("LINE_UPLOAD_IMAGES", "true").lower() == "true"
 
 # ================================================================
 # DATA COLLECTION
