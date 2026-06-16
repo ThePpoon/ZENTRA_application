@@ -94,6 +94,28 @@ _pose_states: dict[int, _PoseState] = {0: _PoseState(0)}
 stats = {"falls": 0, "alerts_sent": 0, "frames_analyzed": 0}
 _last_alert:          float = 0.0
 _fall_confirm_counter: int  = 0
+_pose_risk_now:       bool  = False   # pose flagged abnormal posture/velocity this frame
+_yolo_fall_streak:    int   = 0       # consecutive inferred frames with a YOLO fall box
+
+
+# ================================================================
+# YOLO FALL HELPERS (hybrid fusion)
+# ================================================================
+_NEG_TOKENS = ("no", "not", "stand", "normal", "ok", "safe", "upright")
+
+
+def _is_fall_class(name: str) -> bool:
+    """True if a Roboflow class name means 'fallen' (and not a negative like
+    'no fall' / 'standing')."""
+    n = (name or "").lower()
+    return ("fall" in n or "lying" in n or "down" in n) and not any(t in n for t in _NEG_TOKENS)
+
+
+def _count_yolo_falls(predictions: list) -> int:
+    import config as _c
+    thr = getattr(_c, "FALL_YOLO_CONFIDENCE", 0.5)
+    return sum(1 for p in (predictions or [])
+               if _is_fall_class(p.get("class", "")) and p.get("confidence", 0.0) >= thr)
 
 
 # ================================================================
@@ -201,7 +223,10 @@ def on_frame(frame: np.ndarray, metadata, window_title: str):
     results = _pose_model.process(rgb)
     _draw_landmarks(frame, results)
 
-    global _fall_confirm_counter
+    global _fall_confirm_counter, _pose_risk_now
+
+    if not results.pose_landmarks:
+        _pose_risk_now = False
 
     if results.pose_landmarks:
         h_f, w_f = frame.shape[:2]
@@ -211,6 +236,7 @@ def on_frame(frame: np.ndarray, metadata, window_title: str):
 
         # Confirm counter
         is_risk = analysis["sudden_fall"] or analysis["abnormal_posture"]
+        _pose_risk_now = is_risk
         if is_risk:
             _fall_confirm_counter += 1
             cv2.putText(
@@ -238,20 +264,49 @@ def on_frame(frame: np.ndarray, metadata, window_title: str):
 # ON_DATA
 # ================================================================
 def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
-    global _last_alert, _fall_confirm_counter
+    global _last_alert, _fall_confirm_counter, _yolo_fall_streak
 
-    # Path A: MediaPipe (ใช้ _fall_confirm_counter จาก on_frame)
-    if MP_OK:
-        if _fall_confirm_counter >= cfg.FALL_CONFIRM_FRAMES:
+    predictions = data.get("predictions") or []
+    mode = getattr(cfg, "FALL_MODE", "hybrid").lower()
+
+    # Force pose-only if MediaPipe is the only thing available
+    if not MP_OK and mode != "yolo":
+        mode = "yolo"
+
+    # ── Pose-only: original MediaPipe behaviour ─────────────────
+    if mode == "pose":
+        if MP_OK and _fall_confirm_counter >= cfg.FALL_CONFIRM_FRAMES:
             _trigger_alert(1, "MediaPipe Pose", frame)
             _fall_confirm_counter = 0
         return
 
-    # Path B: Roboflow Fall model (fallback)
-    predictions = data.get("predictions") or []
-    falls       = [p for p in predictions if "fall" in p.get("class", "").lower()]
-    if falls:
-        _trigger_alert(len(falls), "Roboflow Fall Model", frame, predictions)
+    # ── YOLO streak (shared by 'yolo' and 'hybrid') ─────────────
+    n_falls = _count_yolo_falls(predictions)
+    if n_falls > 0:
+        _yolo_fall_streak += 1
+    else:
+        _yolo_fall_streak = 0
+
+    need = max(1, getattr(cfg, "FALL_YOLO_CONFIRM_FRAMES", 4))
+
+    # ── YOLO-only: temporal confirmation, ignore pose ──────────
+    if mode == "yolo":
+        if _yolo_fall_streak >= need:
+            _trigger_alert(max(1, n_falls), "YOLO Fall", frame, predictions)
+            _yolo_fall_streak = 0
+        return
+
+    # ── Hybrid (balanced): YOLO primary + pose cross-check ─────
+    #   • YOLO confirmed over `need` frames → fire
+    #   • OR YOLO half-confirmed AND pose agrees → fire sooner
+    #   • pose alone never fires (kills pose-only false alarms)
+    half = (need + 1) // 2
+    fire = (_yolo_fall_streak >= need) or (_yolo_fall_streak >= half and _pose_risk_now)
+    if fire:
+        method = "Hybrid (YOLO+Pose)" if _pose_risk_now else "Hybrid (YOLO)"
+        _trigger_alert(max(1, n_falls), method, frame, predictions)
+        _yolo_fall_streak = 0
+        _fall_confirm_counter = 0
 
 
 def _trigger_alert(count: int, method: str, frame, preds=None):

@@ -101,6 +101,12 @@ FALL_CONFIRM_FRAMES           = 6
 GAIT_HISTORY_FRAMES           = 30
 GAIT_ANOMALY_THRESH           = 0.20
 
+# ── Fall fusion (Hybrid = YOLO primary + MediaPipe cross-check) ──
+# mode: hybrid | yolo | pose
+FALL_MODE                 = os.getenv("FALL_MODE", "hybrid")
+FALL_YOLO_CONFIDENCE      = float(os.getenv("FALL_YOLO_CONFIDENCE", "0.50"))
+FALL_YOLO_CONFIRM_FRAMES  = int(os.getenv("FALL_YOLO_CONFIRM_FRAMES", "4"))
+
 # ================================================================
 # BYTETRACK — Slide Module 2: Multi-Object Tracking
 # ================================================================
