@@ -336,6 +336,7 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
         "fall_bbox_ratio": 0.72,
         "fall_confirm_frames": 6,
         "use_local_model": False,
+        "fall_mode": "hybrid",          # hybrid | yolo | pose
     },
     "alerts": {
         "violation_cooldown_seconds": 30,

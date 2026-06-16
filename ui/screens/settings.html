@@ -124,6 +124,15 @@
   <div class="settings-group">
     <div class="flex flex-col gap-3">
       <div>
+        <label class="input-label">โหมดตรวจจับการล้ม (Fall)</label>
+        <select class="input" id="sel-fall-mode">
+          <option value="hybrid">Hybrid — YOLO + Pose (แนะนำ: false alarm น้อย, หลายคน)</option>
+          <option value="yolo">YOLO อย่างเดียว — ตรวจ "ล้ม" ตรงๆ (หลายคน)</option>
+          <option value="pose">Pose อย่างเดียว — MediaPipe (วิเคราะห์ท่าทาง, คนเดียว)</option>
+        </select>
+        <div class="text-xs text-muted" style="margin-top:4px">Hybrid: YOLO ยืนยันต่อเนื่อง + ใช้ pose ช่วยยืนยัน · pose อย่างเดียวไม่ทำให้เตือน (ลด false alarm)</div>
+      </div>
+      <div>
         <div class="flex justify-between mb-1">
           <span class="input-label">PPE Confidence threshold</span>
           <span class="text-accent font-600" id="val-ppe">0.70</span>
@@ -369,6 +378,8 @@ function showSection(name, el) {
     if (sl_frames) { sl_frames.value = ai.fall_confirm_frames ?? 6; document.getElementById('val-frames').textContent = sl_frames.value; }
     const sl_ratio = document.getElementById('sl-ratio');
     if (sl_ratio) { sl_ratio.value = ai.fall_bbox_ratio ?? 0.72; document.getElementById('val-ratio').textContent = parseFloat(sl_ratio.value).toFixed(2); }
+    const sel_fm = document.getElementById('sel-fall-mode');
+    if (sel_fm) sel_fm.value = ai.fall_mode || 'hybrid';
   }
   if (name === 'line') {
     const line = _settings.line || {};
@@ -423,6 +434,8 @@ async function saveSettings() {
   if (sl_ppe)    { s.ai = s.ai || {}; s.ai.ppe_confidence    = parseFloat(sl_ppe.value); }
   if (sl_frames) { s.ai = s.ai || {}; s.ai.fall_confirm_frames= parseInt(sl_frames.value); }
   if (sl_ratio)  { s.ai = s.ai || {}; s.ai.fall_bbox_ratio   = parseFloat(sl_ratio.value); }
+  const sel_fm = document.getElementById('sel-fall-mode');
+  if (sel_fm)    { s.ai = s.ai || {}; s.ai.fall_mode = sel_fm.value; }
 
   const tok = document.getElementById('line-token');
   if (tok) { s.line = s.line || {}; s.line.channel_access_token = tok.value; }

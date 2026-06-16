@@ -309,6 +309,12 @@ class Pipeline:
                 cfg.FALL_CONFIRM_FRAMES = int(ai["fall_confirm_frames"])
             if "use_local_model" in ai:
                 cfg.USE_LOCAL_MODEL = bool(ai["use_local_model"])  # applies on next (re)connect
+            if "fall_mode" in ai:
+                cfg.FALL_MODE = str(ai["fall_mode"]).lower()       # hybrid | yolo | pose (live)
+            if "fall_yolo_confidence" in ai:
+                cfg.FALL_YOLO_CONFIDENCE = float(ai["fall_yolo_confidence"])
+            if "fall_yolo_confirm_frames" in ai:
+                cfg.FALL_YOLO_CONFIRM_FRAMES = int(ai["fall_yolo_confirm_frames"])
             alr = settings.get("alerts", {})
             if "violation_cooldown_seconds" in alr:
                 cfg.VIOLATION_COOLDOWN_SECONDS = int(alr["violation_cooldown_seconds"])
