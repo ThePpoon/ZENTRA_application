@@ -88,6 +88,15 @@ def _yolo_to_roboflow(result, conf_min: float = 0.0) -> list[dict]:
     return preds
 
 
+def _ppe_conf_ok(pred: dict, cfg) -> bool:
+    """Per-class confidence gate: small/hard classes (e.g. 'no gloves') use a
+    lower threshold from PPE_CLASS_CONF; others fall back to INFERENCE_CONFIDENCE."""
+    cls = str(pred.get("class", "")).lower()
+    thr = getattr(cfg, "PPE_CLASS_CONF", {}).get(
+        cls, float(getattr(cfg, "INFERENCE_CONFIDENCE", 0.4)))
+    return float(pred.get("confidence", 0.0)) >= thr
+
+
 class _InferenceWorker(threading.Thread):
     def __init__(self, client, ppe_id: str, fall_id: str,
                  local_ppe=None, conf: float = 0.4):
@@ -124,16 +133,18 @@ class _InferenceWorker(threading.Thread):
             try:
                 # Read PPE confidence fresh each loop so the Settings slider applies
                 # live (local model also honours it now).
-                ppe_conf = float(getattr(cfg, "INFERENCE_CONFIDENCE", 0.4))
+                # Predict at a low floor and filter PER CLASS (so small classes
+                # like 'no gloves' can use a lower threshold and stop flickering).
+                floor = float(getattr(cfg, "INFERENCE_SERVER_FLOOR", 0.20))
+                imgsz = int(getattr(cfg, "PPE_IMGSZ", 640))
                 ppe_preds = []
                 if self.local_ppe is not None:
-                    r = self.local_ppe.predict(frame, conf=ppe_conf, verbose=False)
+                    r = self.local_ppe.predict(frame, conf=floor, imgsz=imgsz, verbose=False)
                     if r:
-                        ppe_preds = _yolo_to_roboflow(r[0])
+                        ppe_preds = [p for p in _yolo_to_roboflow(r[0]) if _ppe_conf_ok(p, cfg)]
                 elif self.client:
                     r1 = self.client.infer(frame, model_id=self.ppe_id)
-                    ppe_preds = [p for p in r1.get("predictions", [])
-                                 if p.get("confidence", 0.0) >= ppe_conf]
+                    ppe_preds = [p for p in r1.get("predictions", []) if _ppe_conf_ok(p, cfg)]
                 # Hand the latest frame to the fall thread; read its latest result
                 # without blocking on the slow round-trip.
                 with self._fall_lock:
