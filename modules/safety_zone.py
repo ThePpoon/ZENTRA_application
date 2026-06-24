@@ -63,7 +63,8 @@ def _load_zones():
         return
     try:
         data  = json.loads(pf.read_text())
-        zones = [{"points": d["points"], "name": d.get("name", f"Zone {i+1}"), "ready": True}
+        zones = [{"points": d["points"], "name": d.get("name", f"Zone {i+1}"),
+                  "ready": True, "type": d.get("type", "danger")}
                  for i, d in enumerate(data)]
         if zones:
             print(f"[Zone] Loaded {len(zones)} zone(s)")
@@ -131,6 +132,19 @@ def _is_inside(zone: dict, cx: float, cy: float) -> bool:
     return cv2.pointPolygonTest(arr, (float(cx), float(cy)), False) >= 0
 
 
+def get_exclusion_polygons() -> list:
+    """Polygons of 'exclusion' zones (ignore-regions). The pipeline drops any
+    person whose foot point lies inside one so NO module fires there — cuts
+    false positives from static areas (desks, monitors, supervisor booths)."""
+    polys = []
+    for z in zones:
+        if z.get("ready") and z.get("type") == "exclusion":
+            pts = z.get("points", [])
+            if len(pts) >= 3:
+                polys.append(np.array(pts, dtype=np.int32))
+    return polys
+
+
 # ================================================================
 # DRAW
 # ================================================================
@@ -194,7 +208,8 @@ def on_frame(frame: np.ndarray, metadata, window_title: str):
 def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
     global _last_alert, _intrusion_streak
 
-    ready_zones = [z for z in zones if z.get("ready")]
+    # Only DANGER zones raise intrusions; exclusion zones are ignore-regions
+    ready_zones = [z for z in zones if z.get("ready") and z.get("type", "danger") != "exclusion"]
     if not ready_zones:
         return
 
