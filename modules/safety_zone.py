@@ -7,6 +7,7 @@ from __future__ import annotations
 import cv2
 import json
 import time
+import collections
 import numpy as np
 from pathlib import Path
 from typing import Optional
@@ -28,8 +29,13 @@ _tracker = ByteTracker(
 )
 
 stats        = {"intrusions": 0, "alerts_sent": 0}
-_last_alert: float = 0.0
-_intrusion_streak: int = 0   # consecutive frames with an intruder (debounce)
+_last_alert: float = 0.0       # legacy (unused once per-track path runs)
+_intrusion_streak: int = 0     # legacy (unused once per-track path runs)
+
+# Per-track intrusion state (keyed by persistent track ID)
+_zone_buffer:     dict = {}    # track_id -> deque[bool]   (inside a ready zone per frame)
+_zone_entry:      dict = {}    # track_id -> (zone_name, entry_ts)  (for dwell time)
+_zone_last_alert: dict = {}    # track_id -> float         (last alert time)
 
 ZONE_COLORS = [
     (0, 0, 220), (220, 0, 0), (180, 0, 220),
@@ -192,12 +198,12 @@ def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
     if not ready_zones:
         return
 
+    predictions = data.get("predictions") or []
     # Prefer the pipeline's shared single-pass tracks (same IDs across modules).
     # Fall back to a local tracker only when run standalone (metadata.tracks is
     # None). An empty list means "tracked, but no persons this frame".
     tracks = getattr(metadata, "tracks", None)
     if tracks is None:
-        predictions = data.get("predictions") or []
         person_dets = [p for p in predictions if p.get("class", "").lower() == "person"]
         tracks      = _tracker.update(person_dets)
 
@@ -206,54 +212,67 @@ def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
 
     use_foot = getattr(cfg, "ZONE_USE_FOOT_POINT", True)
     min_hits = getattr(cfg, "ZONE_TRACK_MIN_HITS", 3)
+    required = getattr(cfg, "ZONE_CONFIRM_FRAMES", 3)
+    window   = getattr(cfg, "ZONE_CONFIRM_WINDOW", 5)
+    cooldown = getattr(cfg, "ZONE_COOLDOWN_SECONDS", 20)
+    now      = time.time()
 
-    intruders = []
+    # Per-track intrusion: confirm + cooldown + dwell time PER PERSON, so two
+    # workers no longer share one global streak (correct multi-worker counting).
+    current_ids = set()
     for t in tracks:
-        # Only count stable tracks (ignore brand-new / flickering detections)
-        if len(getattr(t, "history", [])) < min_hits:
-            continue
-        if use_foot:
-            x1, y1, x2, y2 = t.bbox
-            px, py = (x1 + x2) / 2.0, float(y2)   # foot point = bottom-centre
+        tid = t.track_id
+        current_ids.add(tid)
+
+        # Which ready zone is this (stable) track standing in? (foot point)
+        in_zone = None
+        if len(getattr(t, "history", [])) >= min_hits:
+            if use_foot:
+                x1, y1, x2, y2 = t.bbox
+                px, py = (x1 + x2) / 2.0, float(y2)
+            else:
+                px, py = t.center
+            for zone in ready_zones:
+                if _is_inside(zone, px, py):
+                    in_zone = zone["name"]
+                    break
+
+        # Dwell bookkeeping (entry timestamp per track)
+        if in_zone:
+            if _zone_entry.get(tid, (None,))[0] != in_zone:
+                _zone_entry[tid] = (in_zone, now)
         else:
-            px, py = t.center
-        for zone in ready_zones:
-            if _is_inside(zone, px, py):
-                intruders.append({"track_id": t.track_id, "zone": zone["name"]})
-                break
+            _zone_entry.pop(tid, None)
 
-    # Debounce: require N consecutive frames with an intruder before alerting
-    if not intruders:
-        _intrusion_streak = 0
-        return
-    _intrusion_streak += 1
-    if _intrusion_streak < getattr(cfg, "ZONE_CONFIRM_FRAMES", 3):
-        return
+        buf = _zone_buffer.setdefault(tid, collections.deque(maxlen=window))
+        buf.append(in_zone is not None)
 
-    stats["intrusions"] += len(intruders)
+        if (in_zone and sum(buf) >= required
+                and (now - _zone_last_alert.get(tid, 0.0)) >= cooldown):
+            _zone_last_alert[tid] = now
+            dwell = now - _zone_entry.get(tid, (in_zone, now))[1]
+            stats["intrusions"]  += 1
+            stats["alerts_sent"] += 1
+            if frame is not None:
+                get_collector().collect(frame, predictions, "zone_intrusions")
+            print(f"[Zone] ⛔ INTRUSION (ID:{tid}) in {in_zone} (dwell {dwell:.0f}s)")
+            msg = (
+                f"⛔ ZENTRA Zone Alert\n"
+                f"🚨 พบบุคคลเข้าเขตอันตราย (ID:{tid})\n"
+                f"📍 Zone: {in_zone}\n"
+                f"⏱ อยู่ในเขตมาแล้ว ~{dwell:.0f} วินาที\n"
+            )
+            send_line_notify(
+                msg,
+                image        = frame,
+                level        = cfg.ALERT_LEVEL_ALERT,
+                cooldown_key = f"red_zone_{tid}",      # per-track cooldown
+                cooldown_sec = cfg.ZONE_COOLDOWN_SECONDS,
+            )
 
-    if frame is not None:
-        get_collector().collect(frame, predictions, "zone_intrusions")
-
-    now = time.time()
-    if now - _last_alert >= cfg.ZONE_COOLDOWN_SECONDS:
-        _last_alert       = now
-        stats["alerts_sent"] += 1
-        count     = len(intruders)
-        zone_list = ", ".join({i["zone"]             for i in intruders})
-        ids_str   = ", ".join({str(i["track_id"])    for i in intruders})
-        print(f"[Zone] ⛔ INTRUSION: {count} person(s) in {zone_list} (IDs:{ids_str})")
-
-        msg = (
-            f"⛔ ZENTRA Zone Alert\n"
-            f"🚨 พบบุคคลเข้าเขตอันตราย {count} คน\n"
-            f"📍 Zone: {zone_list}\n"
-            f"🆔 Track IDs: {ids_str}\n"
-        )
-        send_line_notify(
-            msg,
-            image        = frame,
-            level        = cfg.ALERT_LEVEL_ALERT,
-            cooldown_key = "red_zone",
-            cooldown_sec = cfg.ZONE_COOLDOWN_SECONDS,
-        )
+    # Prune state for tracks that disappeared
+    for tid in list(_zone_buffer):
+        if tid not in current_ids:
+            _zone_buffer.pop(tid, None)
+            _zone_last_alert.pop(tid, None)
+            _zone_entry.pop(tid, None)

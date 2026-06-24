@@ -138,7 +138,8 @@ ZONE_POLYGON_FILE = str(DATA_DIR / "zones.json")
 MAX_ZONES         = 10
 ZONE_USE_FOOT_POINT = os.getenv("ZONE_USE_FOOT_POINT", "true").lower() == "true"  # test feet, not bbox centre
 ZONE_TRACK_MIN_HITS = int(os.getenv("ZONE_TRACK_MIN_HITS", "3"))   # ignore unstable tracks
-ZONE_CONFIRM_FRAMES = int(os.getenv("ZONE_CONFIRM_FRAMES", "3"))   # debounce intrusion
+ZONE_CONFIRM_FRAMES = int(os.getenv("ZONE_CONFIRM_FRAMES", "3"))   # need N inside-frames per track
+ZONE_CONFIRM_WINDOW = int(os.getenv("ZONE_CONFIRM_WINDOW", "5"))   # ...within the last M frames (per track)
 
 # ================================================================
 # PPE — accuracy / debounce
