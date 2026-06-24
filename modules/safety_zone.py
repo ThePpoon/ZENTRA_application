@@ -188,12 +188,13 @@ def on_frame(frame: np.ndarray, metadata, window_title: str):
     _draw_zones(frame)
     ready = [z for z in zones if z.get("ready")]
 
+    # ASCII only — cv2.putText cannot render Thai (it shows as "????")
     if draw_mode:
-        status, color = "[DRAW] คลิกซ้าย=จุด | คลิกขวา=บันทึก | Z=ยกเลิก", (0, 240, 240)
+        status, color = "[DRAW MODE]", (0, 240, 240)
     elif not ready:
-        status, color = "กด Z เพื่อวาด Red Zone", (100, 100, 220)
+        status, color = "No safety zone", (100, 100, 220)
     else:
-        status = f"Zones:{len(ready)} | Intrusions:{stats['intrusions']} | Z=เพิ่ม | C=ลบ"
+        status = f"Zones:{len(ready)}  Intrusions:{stats['intrusions']}"
         color  = (0, 0, 220)
 
     cv2.putText(frame, status, (10, 60),

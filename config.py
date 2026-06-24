@@ -76,7 +76,7 @@ PPE_SMOOTH_IOU       = float(os.getenv("PPE_SMOOTH_IOU", "0.30"))
 # Predicting at a low floor returns extra overlapping candidates; suppress any
 # same-class box overlapping an already-kept one above this IoU. 0.70 only
 # removes near-identical duplicates (keeps two distinct-but-close people).
-PPE_NMS_IOU          = float(os.getenv("PPE_NMS_IOU", "0.70"))
+PPE_NMS_IOU          = float(os.getenv("PPE_NMS_IOU", "0.45"))
 # One shared inference client serves both PPE and Fall. Keep the server-side
 # confidence floor LOW so neither model starves the other; the real PPE
 # threshold (INFERENCE_CONFIDENCE) is applied in code and Fall uses
@@ -85,13 +85,12 @@ INFERENCE_SERVER_FLOOR = float(os.getenv("INFERENCE_SERVER_FLOOR", "0.20"))
 # Inference resolution for the LOCAL PPE model. Higher = better small-object
 # recall (gloves/glasses on hands) at a little more GPU time. 640 = train size.
 PPE_IMGSZ = int(os.getenv("PPE_IMGSZ", "960"))
-# Per-class confidence overrides. Small/hard classes (gloves, glasses) flicker
-# in/out at the global threshold, so give them a LOWER bar; everything else
-# falls back to INFERENCE_CONFIDENCE.
-PPE_CLASS_CONF = {
-    "no gloves":  0.30, "no_gloves":  0.30,
-    "no glasses": 0.35, "no_glasses": 0.35,
-}
+# Per-class confidence overrides. NOTE: lowering gloves/glasses to 0.30 let in
+# many FALSE boxes on a real webcam (the model is unreliable on those small
+# classes). Left EMPTY so every class uses the global PPE confidence slider —
+# tune it in Settings. Real gloves/glasses accuracy needs retraining with more
+# data, not a lower threshold.
+PPE_CLASS_CONF: dict = {}
 
 # ================================================================
 # PPE CLASSES
