@@ -67,6 +67,11 @@ INFER_EVERY_N_FRAMES = int(os.getenv("INFER_EVERY_N_FRAMES",   "2"))   # PPE is 
 # Anti-flicker: keep the last PPE boxes this long to bridge single-frame misses
 # (detector occasionally drops a frame → boxes blink). 0 = no hold.
 PPE_HOLD_SEC         = float(os.getenv("PPE_HOLD_SEC", "0.5"))
+# Display smoothing: EMA on box coordinates so boxes glide instead of jittering
+# frame-to-frame ("ดิ้น"). Lower ALPHA = smoother but a touch laggier.
+PPE_SMOOTH           = os.getenv("PPE_SMOOTH", "true").lower() == "true"
+PPE_SMOOTH_ALPHA     = float(os.getenv("PPE_SMOOTH_ALPHA", "0.4"))
+PPE_SMOOTH_IOU       = float(os.getenv("PPE_SMOOTH_IOU", "0.30"))
 # One shared inference client serves both PPE and Fall. Keep the server-side
 # confidence floor LOW so neither model starves the other; the real PPE
 # threshold (INFERENCE_CONFIDENCE) is applied in code and Fall uses
