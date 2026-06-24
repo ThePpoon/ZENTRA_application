@@ -92,6 +92,44 @@ def draw_predictions(frame: np.ndarray, predictions: list[dict]) -> np.ndarray:
     return frame
 
 
+def draw_person_status(frame: np.ndarray, predictions: list[dict], tracks=None) -> np.ndarray:
+    """Clean 'control-room' display: ONE box per person + a compact PPE status
+    label, instead of many overlapping class boxes. Green = compliant,
+    red = missing PPE (listed). Uses ASCII text only (cv2 can't render Thai)."""
+    persons = [p for p in predictions if str(p.get("class", "")).lower() == "person"]
+    viols   = [p for p in predictions if _info(p.get("class", ""))["violation"]]
+    track_boxes = {t.track_id: list(t.bbox) for t in (tracks or [])}
+
+    for person in persons:
+        pb = _pred_box(person)
+        x1, y1, x2, y2 = (int(v) for v in pb)
+
+        # Which violations sit on this person?
+        missing = sorted({_info(v.get("class", ""))["label"]
+                          for v in viols if _overlap_inside(_pred_box(v), pb) >= 0.30})
+        ok    = not missing
+        color = (0, 170, 0) if ok else (0, 0, 230)   # green / red (BGR)
+
+        # Match a track id (display only)
+        tid, best = None, 0.5
+        for k, tb in track_boxes.items():
+            ov = _overlap_inside(pb, tb)
+            if ov >= best:
+                best, tid = ov, k
+
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+
+        prefix = f"ID{tid}  " if tid is not None else ""
+        text   = prefix + ("PPE OK" if ok else
+                           "MISSING: " + ", ".join(m.replace("No ", "") for m in missing))
+        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
+        ly = max(y1, th + 10)
+        cv2.rectangle(frame, (x1, ly - th - 10), (x1 + tw + 12, ly), color, -1)
+        cv2.putText(frame, text, (x1 + 6, ly - 5), cv2.FONT_HERSHEY_SIMPLEX,
+                    0.55, (255, 255, 255), 1, cv2.LINE_AA)
+    return frame
+
+
 # ================================================================
 # ON_FRAME — OSD overlay + imshow
 # ================================================================

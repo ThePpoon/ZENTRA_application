@@ -69,6 +69,9 @@ INFER_EVERY_N_FRAMES = int(os.getenv("INFER_EVERY_N_FRAMES",   "2"))   # PPE is 
 PPE_HOLD_SEC         = float(os.getenv("PPE_HOLD_SEC", "0.5"))
 # Display smoothing: EMA on box coordinates so boxes glide instead of jittering
 # frame-to-frame ("ดิ้น"). Lower ALPHA = smoother but a touch laggier.
+# Clean display: draw ONE box per person + a PPE status label instead of many
+# overlapping class boxes (Protex-style, far less cluttered).
+PPE_CLEAN_DISPLAY    = os.getenv("PPE_CLEAN_DISPLAY", "true").lower() == "true"
 PPE_SMOOTH           = os.getenv("PPE_SMOOTH", "true").lower() == "true"
 PPE_SMOOTH_ALPHA     = float(os.getenv("PPE_SMOOTH_ALPHA", "0.4"))
 PPE_SMOOTH_IOU       = float(os.getenv("PPE_SMOOTH_IOU", "0.30"))
