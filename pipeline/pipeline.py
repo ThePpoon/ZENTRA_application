@@ -88,6 +88,58 @@ def _yolo_to_roboflow(result, conf_min: float = 0.0) -> list[dict]:
     return preds
 
 
+class _BoxSmoother:
+    """Temporal EMA on detection boxes (DISPLAY only) so they glide instead of
+    jittering frame-to-frame. Matches boxes across frames by class + IoU; also
+    holds a box for `ttl` seconds to bridge per-class flicker (e.g. gloves)."""
+
+    def __init__(self):
+        self._items: list[dict] = []   # class,confidence,x,y,width,height,ts
+
+    @staticmethod
+    def _xyxy(b: dict):
+        return (b["x"] - b["width"] / 2, b["y"] - b["height"] / 2,
+                b["x"] + b["width"] / 2, b["y"] + b["height"] / 2)
+
+    @staticmethod
+    def _iou(a, b):
+        ax1, ay1, ax2, ay2 = a; bx1, by1, bx2, by2 = b
+        ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+        ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+        inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+        union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter + 1e-6
+        return inter / union
+
+    def update(self, preds, now: float, alpha: float, iou_thr: float, ttl: float):
+        used = set()
+        for p in preds:
+            pb, cls = self._xyxy(p), p.get("class", "")
+            best, bj = iou_thr, None
+            for j, it in enumerate(self._items):
+                if j in used or it["class"] != cls:
+                    continue
+                i = self._iou(pb, self._xyxy(it))
+                if i >= best:
+                    best, bj = i, j
+            if bj is None:                       # new object
+                self._items.append({
+                    "class": cls, "confidence": p.get("confidence", 0.0),
+                    "x": p.get("x", 0), "y": p.get("y", 0),
+                    "width": p.get("width", 0), "height": p.get("height", 0), "ts": now})
+                used.add(len(self._items) - 1)
+            else:                                # EMA toward the new detection
+                it = self._items[bj]
+                for k in ("x", "y", "width", "height"):
+                    it[k] = alpha * p.get(k, 0) + (1 - alpha) * it[k]
+                it["confidence"] = p.get("confidence", it["confidence"])
+                it["ts"] = now
+                used.add(bj)
+        self._items = [it for it in self._items if now - it["ts"] <= ttl]
+        return [{"class": it["class"], "confidence": it["confidence"],
+                 "x": it["x"], "y": it["y"], "width": it["width"], "height": it["height"]}
+                for it in self._items]
+
+
 def _ppe_conf_ok(pred: dict, cfg) -> bool:
     """Per-class confidence gate: small/hard classes (e.g. 'no gloves') use a
     lower threshold from PPE_CLASS_CONF; others fall back to INFERENCE_CONFIDENCE."""
@@ -680,6 +732,7 @@ class Pipeline:
                 track_buffer=getattr(cfg, "BYTETRACK_TRACK_BUFFER", 30),
                 match_thresh=getattr(cfg, "BYTETRACK_MATCH_THRESH", 0.8),
             )
+            ppe_smoother = _BoxSmoother()   # display-only EMA (anti-jitter)
 
             print("[Pipeline] ▶️  Process loop running")
 
@@ -727,7 +780,15 @@ class Pipeline:
                                 print(f"[Pipeline] PPE model (cloud) classes seen: {sorted(seen_ppe_classes)}")
 
                 annotated = raw.copy()
-                annotated = ppe_module.draw_predictions(annotated, last_ppe_preds)
+                # Smooth boxes for DISPLAY only (logic/tracking still use raw preds)
+                disp_ppe = last_ppe_preds
+                if getattr(cfg, "PPE_SMOOTH", True):
+                    disp_ppe = ppe_smoother.update(
+                        last_ppe_preds, time.time(),
+                        getattr(cfg, "PPE_SMOOTH_ALPHA", 0.4),
+                        getattr(cfg, "PPE_SMOOTH_IOU", 0.30),
+                        getattr(cfg, "PPE_HOLD_SEC", 0.5))
+                annotated = ppe_module.draw_predictions(annotated, disp_ppe)
                 annotated = fall_module.draw_fall_predictions(annotated, last_fall_preds)
 
                 # Run the shared person tracker once per frame and expose the
