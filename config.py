@@ -72,6 +72,16 @@ PPE_HOLD_SEC         = float(os.getenv("PPE_HOLD_SEC", "0.5"))
 # threshold (INFERENCE_CONFIDENCE) is applied in code and Fall uses
 # FALL_YOLO_CONFIDENCE — so the PPE slider can't throttle fall detection.
 INFERENCE_SERVER_FLOOR = float(os.getenv("INFERENCE_SERVER_FLOOR", "0.20"))
+# Inference resolution for the LOCAL PPE model. Higher = better small-object
+# recall (gloves/glasses on hands) at a little more GPU time. 640 = train size.
+PPE_IMGSZ = int(os.getenv("PPE_IMGSZ", "960"))
+# Per-class confidence overrides. Small/hard classes (gloves, glasses) flicker
+# in/out at the global threshold, so give them a LOWER bar; everything else
+# falls back to INFERENCE_CONFIDENCE.
+PPE_CLASS_CONF = {
+    "no gloves":  0.30, "no_gloves":  0.30,
+    "no glasses": 0.35, "no_glasses": 0.35,
+}
 
 # ================================================================
 # PPE CLASSES
