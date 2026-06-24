@@ -143,7 +143,9 @@ ZONE_CONFIRM_FRAMES = int(os.getenv("ZONE_CONFIRM_FRAMES", "3"))   # debounce in
 # ================================================================
 # PPE — accuracy / debounce
 # ================================================================
-PPE_CONFIRM_FRAMES = int(os.getenv("PPE_CONFIRM_FRAMES", "3"))     # consecutive frames before alerting
+PPE_CONFIRM_FRAMES = int(os.getenv("PPE_CONFIRM_FRAMES", "3"))     # need N violation frames per track
+PPE_CONFIRM_WINDOW = int(os.getenv("PPE_CONFIRM_WINDOW", "5"))     # ...within the last M frames (per track)
+PPE_ASSOC_OVERLAP  = float(os.getenv("PPE_ASSOC_OVERLAP", "0.30")) # min fraction of a PPE box inside a person box to associate
 
 # ================================================================
 # ALERT COOLDOWN — Slide: 3 ระดับ
