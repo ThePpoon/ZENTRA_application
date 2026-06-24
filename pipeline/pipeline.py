@@ -808,6 +808,15 @@ class Pipeline:
                             if seen_ppe_classes:
                                 print(f"[Pipeline] PPE model (cloud) classes seen: {sorted(seen_ppe_classes)}")
 
+                # Shared person tracker FIRST (needed for the clean per-person
+                # display + shared meta). Drop anyone in an exclusion zone so NO
+                # module fires there.
+                person_dets = [p for p in last_ppe_preds
+                               if str(p.get("class", "")).lower() == "person"]
+                tracks = person_tracker.update(person_dets)
+                tracks = self._filter_excluded(tracks, zone_module)
+                meta = _Meta(frame_id, tracks)
+
                 annotated = raw.copy()
                 # Smooth boxes for DISPLAY only (logic/tracking still use raw preds)
                 disp_ppe = last_ppe_preds
@@ -819,18 +828,12 @@ class Pipeline:
                         getattr(cfg, "PPE_HOLD_SEC", 0.5))
                     # Final guarantee: no overlapping duplicate boxes get drawn
                     disp_ppe = _nms_dedup(disp_ppe, getattr(cfg, "PPE_NMS_IOU", 0.70))
-                annotated = ppe_module.draw_predictions(annotated, disp_ppe)
+                if getattr(cfg, "PPE_CLEAN_DISPLAY", True):
+                    # One clean box per person + PPE status label
+                    annotated = ppe_module.draw_person_status(annotated, disp_ppe, tracks)
+                else:
+                    annotated = ppe_module.draw_predictions(annotated, disp_ppe)
                 annotated = fall_module.draw_fall_predictions(annotated, last_fall_preds)
-
-                # Run the shared person tracker once per frame and expose the
-                # tracks via meta so every module uses the same IDs.
-                person_dets = [p for p in last_ppe_preds
-                               if str(p.get("class", "")).lower() == "person"]
-                tracks = person_tracker.update(person_dets)
-                # Drop anyone standing in an exclusion (ignore) zone so NO module
-                # fires there — reduces false positives in static/irrelevant areas.
-                tracks = self._filter_excluded(tracks, zone_module)
-                meta = _Meta(frame_id, tracks)
 
                 # Pass empty window_title — modules skip cv2.imshow().
                 # MediaPipe Pose (fall_module.on_frame) is heavy, so run it only in
