@@ -140,6 +140,32 @@ class _BoxSmoother:
                 for it in self._items]
 
 
+def _box_xyxy(p: dict):
+    return (p["x"] - p["width"] / 2, p["y"] - p["height"] / 2,
+            p["x"] + p["width"] / 2, p["y"] + p["height"] / 2)
+
+
+def _iou_xyxy(a, b):
+    ax1, ay1, ax2, ay2 = a; bx1, by1, bx2, by2 = b
+    ix1, iy1 = max(ax1, bx1), max(ay1, by1)
+    ix2, iy2 = min(ax2, bx2), min(ay2, by2)
+    inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+    union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter + 1e-6
+    return inter / union
+
+
+def _nms_dedup(preds: list, iou_thr: float) -> list:
+    """Class-aware NMS: keep the highest-confidence box, drop same-class boxes
+    that overlap it above iou_thr (removes the duplicate 'ซ้อน' boxes)."""
+    out: list = []
+    for p in sorted(preds, key=lambda x: x.get("confidence", 0.0), reverse=True):
+        pb, cls = _box_xyxy(p), p.get("class")
+        if any(q.get("class") == cls and _iou_xyxy(pb, _box_xyxy(q)) > iou_thr for q in out):
+            continue
+        out.append(p)
+    return out
+
+
 def _ppe_conf_ok(pred: dict, cfg) -> bool:
     """Per-class confidence gate: small/hard classes (e.g. 'no gloves') use a
     lower threshold from PPE_CLASS_CONF; others fall back to INFERENCE_CONFIDENCE."""
@@ -763,6 +789,9 @@ class Pipeline:
                 res = inf_worker.get_result()
                 if res:
                     _, new_ppe, last_fall_preds = res
+                    # Merge duplicate overlapping boxes (one object → one box) so
+                    # tracking doesn't double-count and the view isn't cluttered.
+                    new_ppe = _nms_dedup(new_ppe, getattr(cfg, "PPE_NMS_IOU", 0.70))
                     # Anti-flicker: refresh on a real detection; on a momentary
                     # empty result keep the previous boxes until the hold expires
                     # (stops boxes blinking while a person stands still).
@@ -788,6 +817,8 @@ class Pipeline:
                         getattr(cfg, "PPE_SMOOTH_ALPHA", 0.4),
                         getattr(cfg, "PPE_SMOOTH_IOU", 0.30),
                         getattr(cfg, "PPE_HOLD_SEC", 0.5))
+                    # Final guarantee: no overlapping duplicate boxes get drawn
+                    disp_ppe = _nms_dedup(disp_ppe, getattr(cfg, "PPE_NMS_IOU", 0.70))
                 annotated = ppe_module.draw_predictions(annotated, disp_ppe)
                 annotated = fall_module.draw_fall_predictions(annotated, last_fall_preds)
 
