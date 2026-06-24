@@ -100,9 +100,22 @@ class _InferenceWorker(threading.Thread):
         self.in_q      = queue.Queue(maxsize=2)
         self.out_q     = queue.Queue(maxsize=4)
         self._stop     = threading.Event()
+        # Cloud fall inference (~300 ms) runs on its OWN thread so the fast PPE
+        # result (~10 ms on GPU) is NEVER delayed waiting for it (fixes the
+        # laggy PPE boxes). They share only the latest frame + latest fall preds.
+        self._fall_lock  = threading.Lock()
+        self._fall_frame: Optional[np.ndarray] = None
+        self._fall_preds: list = []
+        self._fall_thr = None
 
     def run(self):
         import config as cfg
+        # Spin up the independent fall-inference thread (only if a cloud client)
+        if self.client:
+            self._fall_thr = threading.Thread(target=self._fall_loop, daemon=True,
+                                              name="FallInfer")
+            self._fall_thr.start()
+
         while not self._stop.is_set():
             try:
                 fid, frame = self.in_q.get(timeout=0.5)
@@ -110,31 +123,43 @@ class _InferenceWorker(threading.Thread):
                 continue
             try:
                 # Read PPE confidence fresh each loop so the Settings slider applies
-                # live (local model also honours it now). Fall is filtered separately
-                # by FALL_YOLO_CONFIDENCE in heat_stroke, so PPE conf never throttles it.
+                # live (local model also honours it now).
                 ppe_conf = float(getattr(cfg, "INFERENCE_CONFIDENCE", 0.4))
-                ppe_preds, fall_preds = [], []
+                ppe_preds = []
                 if self.local_ppe is not None:
-                    # PPE from the locally fine-tuned YOLOv8 model
                     r = self.local_ppe.predict(frame, conf=ppe_conf, verbose=False)
                     if r:
                         ppe_preds = _yolo_to_roboflow(r[0])
                 elif self.client:
-                    # Server returns low-floor candidates; filter PPE in code by the
-                    # live PPE threshold (keeps fall detections independent).
                     r1 = self.client.infer(frame, model_id=self.ppe_id)
                     ppe_preds = [p for p in r1.get("predictions", [])
                                  if p.get("confidence", 0.0) >= ppe_conf]
-                # Fall always via the Roboflow server (MediaPipe pose also covers it)
-                if self.client:
-                    try:
-                        r2 = self.client.infer(frame, model_id=self.fall_id)
-                        fall_preds = r2.get("predictions", [])
-                    except Exception:
-                        fall_preds = []
+                # Hand the latest frame to the fall thread; read its latest result
+                # without blocking on the slow round-trip.
+                with self._fall_lock:
+                    self._fall_frame = frame
+                    fall_preds = list(self._fall_preds)
                 self.out_q.put((fid, ppe_preds, fall_preds))
             except Exception as e:
                 print(f"[Inference] {e}")
+
+    def _fall_loop(self):
+        """Run cloud fall inference continuously on the MOST RECENT frame only,
+        decoupled from PPE so it can be slow without making the view lag."""
+        while not self._stop.is_set():
+            with self._fall_lock:
+                frame = self._fall_frame
+                self._fall_frame = None
+            if frame is None:
+                time.sleep(0.02)
+                continue
+            try:
+                r = self.client.infer(frame, model_id=self.fall_id)
+                preds = r.get("predictions", [])
+            except Exception:
+                preds = []
+            with self._fall_lock:
+                self._fall_preds = preds
 
     def submit(self, fid: int, frame: np.ndarray):
         if not self.in_q.full():
