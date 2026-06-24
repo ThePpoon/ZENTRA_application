@@ -95,7 +95,13 @@ stats = {"falls": 0, "alerts_sent": 0, "frames_analyzed": 0}
 _last_alert:          float = 0.0
 _fall_confirm_counter: int  = 0
 _pose_risk_now:       bool  = False   # pose flagged abnormal posture/velocity this frame
-_yolo_fall_streak:    int   = 0       # consecutive inferred frames with a YOLO fall box
+_yolo_fall_streak:    int   = 0       # consecutive inferred frames with a YOLO fall box (legacy/global)
+
+# Per-track fall state (used when the pipeline supplies shared tracks)
+_fall_buffer:       dict  = {}        # track_id -> deque[bool] (fall box on this person per frame)
+_fall_last_alert:   dict  = {}        # track_id -> last alert time
+_fall_unattr_streak: int  = 0         # streak of falls NOT attributable to any track (recall net)
+_fall_unattr_last:  float = 0.0       # last unattributed-fall alert time
 
 
 # ================================================================
@@ -116,6 +122,22 @@ def _count_yolo_falls(predictions: list) -> int:
     thr = getattr(_c, "FALL_YOLO_CONFIDENCE", 0.5)
     return sum(1 for p in (predictions or [])
                if _is_fall_class(p.get("class", "")) and p.get("confidence", 0.0) >= thr)
+
+
+def _pred_box(p: dict) -> list:
+    """Roboflow-style center box (x,y,w,h) → [x1,y1,x2,y2]."""
+    x, y = p.get("x", 0), p.get("y", 0)
+    w, h = p.get("width", 0), p.get("height", 0)
+    return [x - w / 2, y - h / 2, x + w / 2, y + h / 2]
+
+
+def _overlap_inside(inner: list, outer: list) -> float:
+    """Fraction of `inner` box area inside `outer` box (0..1)."""
+    ix1 = max(inner[0], outer[0]); iy1 = max(inner[1], outer[1])
+    ix2 = min(inner[2], outer[2]); iy2 = min(inner[3], outer[3])
+    inter = max(0.0, ix2 - ix1) * max(0.0, iy2 - iy1)
+    area  = max(1e-6, (inner[2] - inner[0]) * (inner[3] - inner[1]))
+    return inter / area
 
 
 # ================================================================
@@ -265,6 +287,7 @@ def on_frame(frame: np.ndarray, metadata, window_title: str):
 # ================================================================
 def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
     global _last_alert, _fall_confirm_counter, _yolo_fall_streak
+    global _fall_unattr_streak, _fall_unattr_last
 
     predictions = data.get("predictions") or []
     mode = getattr(cfg, "FALL_MODE", "hybrid").lower()
@@ -280,33 +303,79 @@ def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
             _fall_confirm_counter = 0
         return
 
-    # ── YOLO streak (shared by 'yolo' and 'hybrid') ─────────────
-    n_falls = _count_yolo_falls(predictions)
-    if n_falls > 0:
-        _yolo_fall_streak += 1
-    else:
-        _yolo_fall_streak = 0
-
+    thr = getattr(cfg, "FALL_YOLO_CONFIDENCE", 0.5)
+    fall_boxes = [p for p in predictions
+                  if _is_fall_class(p.get("class", "")) and p.get("confidence", 0.0) >= thr]
     need = max(1, getattr(cfg, "FALL_YOLO_CONFIRM_FRAMES", 4))
+    half = (need + 1) // 2
+    tracks = getattr(metadata, "tracks", None)
 
-    # ── YOLO-only: temporal confirmation, ignore pose ──────────
-    if mode == "yolo":
-        if _yolo_fall_streak >= need:
-            _trigger_alert(max(1, n_falls), "YOLO Fall", frame, predictions)
+    # ── Legacy global path (standalone, no shared tracks) ───────
+    if tracks is None:
+        _yolo_fall_streak = _yolo_fall_streak + 1 if fall_boxes else 0
+        if mode == "yolo":
+            if _yolo_fall_streak >= need:
+                _trigger_alert(max(1, len(fall_boxes)), "YOLO Fall", frame, predictions)
+                _yolo_fall_streak = 0
+            return
+        fire = (_yolo_fall_streak >= need) or (_yolo_fall_streak >= half and _pose_risk_now)
+        if fire:
+            method = "Hybrid (YOLO+Pose)" if _pose_risk_now else "Hybrid (YOLO)"
+            _trigger_alert(max(1, len(fall_boxes)), method, frame, predictions)
             _yolo_fall_streak = 0
+            _fall_confirm_counter = 0
         return
 
-    # ── Hybrid (balanced): YOLO primary + pose cross-check ─────
-    #   • YOLO confirmed over `need` frames → fire
-    #   • OR YOLO half-confirmed AND pose agrees → fire sooner
-    #   • pose alone never fires (kills pose-only false alarms)
-    half = (need + 1) // 2
-    fire = (_yolo_fall_streak >= need) or (_yolo_fall_streak >= half and _pose_risk_now)
-    if fire:
-        method = "Hybrid (YOLO+Pose)" if _pose_risk_now else "Hybrid (YOLO)"
-        _trigger_alert(max(1, n_falls), method, frame, predictions)
-        _yolo_fall_streak = 0
-        _fall_confirm_counter = 0
+    # ── Per-track path: confirm a fall PER PERSON (multi-worker) ─
+    window   = getattr(cfg, "FALL_CONFIRM_WINDOW", need + 2)
+    min_ov   = getattr(cfg, "FALL_ASSOC_OVERLAP", 0.30)
+    cooldown = getattr(cfg, "FALL_COOLDOWN_SECONDS", 15)
+    now      = time.time()
+
+    track_boxes = {t.track_id: list(t.bbox) for t in tracks}
+    current_ids = set(track_boxes)
+
+    # Associate each fall box to the person track it overlaps most
+    attributed: set = set()
+    unattributed = 0
+    for fb in fall_boxes:
+        box = _pred_box(fb)
+        best_id, best = None, min_ov
+        for tid, tb in track_boxes.items():
+            ov = _overlap_inside(box, tb)
+            if ov >= best:
+                best, best_id = ov, tid
+        if best_id is not None:
+            attributed.add(best_id)
+        else:
+            unattributed += 1
+
+    # Per-track confirmation + per-track cooldown
+    for tid in current_ids:
+        buf = _fall_buffer.setdefault(tid, collections.deque(maxlen=window))
+        buf.append(tid in attributed)
+        if mode == "yolo":
+            fire = sum(buf) >= need
+        else:  # hybrid — pose cross-check lets it fire sooner (pose alone never fires)
+            fire = (sum(buf) >= need) or (sum(buf) >= half and _pose_risk_now)
+        if fire and (now - _fall_last_alert.get(tid, 0.0)) >= cooldown:
+            _fall_last_alert[tid] = now
+            method = ("Hybrid (YOLO+Pose)" if (mode != "yolo" and _pose_risk_now)
+                      else ("YOLO Fall" if mode == "yolo" else "Hybrid (YOLO)"))
+            _send_fall_alert(1, f"{method} ID:{tid}", frame, predictions, f"fall_{tid}")
+
+    # Recall safety net: falls not attributable to any track still alert
+    _fall_unattr_streak = _fall_unattr_streak + 1 if unattributed > 0 else 0
+    if _fall_unattr_streak >= need and (now - _fall_unattr_last) >= cooldown:
+        _fall_unattr_last = now
+        _send_fall_alert(unattributed, "YOLO Fall (untracked)", frame, predictions, "fall_unattr")
+        _fall_unattr_streak = 0
+
+    # Prune state for tracks that disappeared
+    for tid in list(_fall_buffer):
+        if tid not in current_ids:
+            _fall_buffer.pop(tid, None)
+            _fall_last_alert.pop(tid, None)
 
 
 def _trigger_alert(count: int, method: str, frame, preds=None):
@@ -332,5 +401,28 @@ def _trigger_alert(count: int, method: str, frame, preds=None):
         image        = frame,
         level        = cfg.ALERT_LEVEL_EMERGENCY,
         cooldown_key = "fall_detection",
+        cooldown_sec = cfg.FALL_COOLDOWN_SECONDS,
+    )
+
+
+def _send_fall_alert(count: int, method: str, frame, preds, cooldown_key: str):
+    """Emit a fall EMERGENCY. Caller has already applied its (per-track or
+    global) cooldown gate; cooldown_key keeps the LINE sender de-duplicated
+    per person too."""
+    stats["falls"]       += count
+    stats["alerts_sent"] += 1
+    if frame is not None:
+        get_collector().collect(frame, preds or [], "fall_events", force=True)
+    print(f"[HeatStroke] 🆘 FALL ALERT: {count} person(s) [{method}]")
+    msg = (
+        f"🆘 ZENTRA Emergency Alert\n"
+        f"🚨 ตรวจพบการล้ม / หมดสติ {count} ราย\n"
+        f"⏰ ต้องช่วยเหลือภายใน 30 นาที!\n"
+    )
+    send_line_notify(
+        msg,
+        image        = frame,
+        level        = cfg.ALERT_LEVEL_EMERGENCY,
+        cooldown_key = cooldown_key,
         cooldown_sec = cfg.FALL_COOLDOWN_SECONDS,
     )

@@ -115,7 +115,9 @@ GAIT_ANOMALY_THRESH           = 0.20
 # mode: hybrid | yolo | pose
 FALL_MODE                 = os.getenv("FALL_MODE", "hybrid")
 FALL_YOLO_CONFIDENCE      = float(os.getenv("FALL_YOLO_CONFIDENCE", "0.50"))
-FALL_YOLO_CONFIRM_FRAMES  = int(os.getenv("FALL_YOLO_CONFIRM_FRAMES", "4"))
+FALL_YOLO_CONFIRM_FRAMES  = int(os.getenv("FALL_YOLO_CONFIRM_FRAMES", "4"))   # need N fall-frames per track
+FALL_CONFIRM_WINDOW       = int(os.getenv("FALL_CONFIRM_WINDOW", "6"))        # ...within the last M frames
+FALL_ASSOC_OVERLAP        = float(os.getenv("FALL_ASSOC_OVERLAP", "0.30"))    # min overlap of a fall box inside a person box
 # MediaPipe Pose is heavy. Run it only every Nth frame (and never in 'yolo'
 # mode) so it doesn't cap the live pipeline FPS / freeze the Live view.
 FALL_POSE_EVERY_N         = int(os.getenv("FALL_POSE_EVERY_N", "3"))
