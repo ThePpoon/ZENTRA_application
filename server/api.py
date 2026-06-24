@@ -301,6 +301,7 @@ async def create_zone(body: dict[str, Any]):
         "name":    body.get("name", f"Zone {len(zones) + 1}"),
         "color":   body.get("color", "#ef4444"),
         "points":  body.get("points", []),
+        "type":    body.get("type", "danger"),   # danger (detect) | exclusion (ignore)
         "enabled": True,
     }
     zones.append(zone)

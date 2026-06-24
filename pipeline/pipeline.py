@@ -498,6 +498,27 @@ class Pipeline:
             return None
 
     @staticmethod
+    def _filter_excluded(tracks, zone_module):
+        """Remove tracks whose foot point lies inside any exclusion zone."""
+        try:
+            polys = zone_module.get_exclusion_polygons()
+        except Exception:
+            polys = []
+        if not polys:
+            return tracks
+        kept = []
+        for t in tracks:
+            x1, y1, x2, y2 = t.bbox
+            fx, fy = (x1 + x2) / 2.0, float(y2)   # foot point (bottom-centre)
+            inside = any(
+                cv2.pointPolygonTest(p, (float(fx), float(fy)), False) >= 0
+                for p in polys
+            )
+            if not inside:
+                kept.append(t)
+        return kept
+
+    @staticmethod
     def _validate_ppe_classes(names, source: str):
         """Log whether the active PPE model exposes the classes downstream modules
         rely on: 'person' (Safety Zone tracking) and at least one violation class
@@ -668,6 +689,9 @@ class Pipeline:
                 person_dets = [p for p in last_ppe_preds
                                if str(p.get("class", "")).lower() == "person"]
                 tracks = person_tracker.update(person_dets)
+                # Drop anyone standing in an exclusion (ignore) zone so NO module
+                # fires there — reduces false positives in static/irrelevant areas.
+                tracks = self._filter_excluded(tracks, zone_module)
                 meta = _Meta(frame_id, tracks)
 
                 # Pass empty window_title — modules skip cv2.imshow().

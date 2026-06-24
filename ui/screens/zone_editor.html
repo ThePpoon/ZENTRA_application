@@ -31,6 +31,11 @@
           <div class="zone-detail-title">คุณสมบัติ Zone</div>
           <label class="input-label">ชื่อ Zone</label>
           <input class="input mb-2" id="zone-name-input" type="text" placeholder="Zone A...">
+          <label class="input-label">ประเภทโซน</label>
+          <select class="input mb-2" id="zone-type-input">
+            <option value="danger">เขตอันตราย — ตรวจจับ + แจ้งเตือน</option>
+            <option value="exclusion">พื้นที่ยกเว้น — ไม่ตรวจในบริเวณนี้ (ลด false alarm)</option>
+          </select>
           <label class="input-label">สีแสดงผล</label>
           <div class="color-palette" id="color-palette"></div>
           <div class="flex justify-between items-center mt-2">
@@ -165,21 +170,25 @@ function redraw() {
   // Draw saved zones
   for (const z of ZE.zones) {
     if (z.points.length < 2) continue;
+    const isEx = z.type === 'exclusion';
+    const col  = isEx ? '#94a3b8' : (z.color || '#ef4444');   // exclusion = grey
     const pts = z.points.map(([rx,ry]) => toDisplay(rx, ry));
     ctx.beginPath();
     ctx.moveTo(pts[0].x, pts[0].y);
     for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
     ctx.closePath();
-    ctx.fillStyle = (z.color || '#ef4444') + '33';
+    ctx.fillStyle = col + '33';
     ctx.fill();
-    ctx.strokeStyle = z.color || '#ef4444';
+    ctx.strokeStyle = col;
     ctx.lineWidth   = 2;
+    if (isEx) ctx.setLineDash([8, 4]);
     ctx.stroke();
+    ctx.setLineDash([]);
     // Vertex handles
     for (const p of pts) {
       ctx.beginPath();
       ctx.arc(p.x, p.y, 5, 0, Math.PI*2);
-      ctx.fillStyle = z.color || '#ef4444';
+      ctx.fillStyle = col;
       ctx.fill();
     }
     // Label
@@ -189,7 +198,7 @@ function redraw() {
       ctx.fillStyle = 'rgba(255,255,255,0.85)';
       ctx.font = 'bold 12px Sarabun, sans-serif';
       ctx.textAlign = 'center';
-      ctx.fillText(z.name, cx, cy);
+      ctx.fillText(z.name + (isEx ? ' (ยกเว้น)' : ''), cx, cy);
     }
   }
 
@@ -249,6 +258,7 @@ function startNewZone() {
   ZE.canvas.style.cursor = 'crosshair';
   document.getElementById('zone-detail').style.display = 'block';
   document.getElementById('zone-name-input').value = `Zone ${ZE.zones.length + 1}`;
+  const tsel = document.getElementById('zone-type-input'); if (tsel) tsel.value = 'danger';
   document.getElementById('zone-detail').scrollIntoView({behavior:'smooth'});
 }
 
@@ -258,7 +268,8 @@ async function saveZone() {
     return;
   }
   const name  = document.getElementById('zone-name-input').value.trim() || 'Zone';
-  const body  = { name, color: ZE.selectedColor, points: ZE.currentPts };
+  const type  = (document.getElementById('zone-type-input') || {}).value || 'danger';
+  const body  = { name, type, color: ZE.selectedColor, points: ZE.currentPts };
 
   if (ZE.selectedId !== null) {
     await fetch(`/api/zones/${ZE.selectedId}`, {
@@ -299,6 +310,7 @@ function editZone(zone) {
   ZE.drawing       = true;
   ZE.canvas.style.cursor = 'crosshair';
   document.getElementById('zone-name-input').value = zone.name;
+  const tsel = document.getElementById('zone-type-input'); if (tsel) tsel.value = zone.type || 'danger';
   document.getElementById('zone-detail').style.display = 'block';
   updateColorPalette(ZE.selectedColor);
   // Remove zone from list so we can redraw
@@ -315,8 +327,8 @@ function renderZoneList() {
   }
   container.innerHTML = ZE.zones.map(z => `
     <div class="zone-list-item">
-      <div class="zone-color-swatch" style="background:${z.color || '#ef4444'}"></div>
-      <span class="zone-item-name">${z.name}</span>
+      <div class="zone-color-swatch" style="background:${z.type === 'exclusion' ? '#94a3b8' : (z.color || '#ef4444')}"></div>
+      <span class="zone-item-name">${z.name}${z.type === 'exclusion' ? ' <span class="text-xs text-muted">(ยกเว้น)</span>' : ''}</span>
       <div class="zone-item-actions">
         <button class="btn btn-ghost btn-sm" style="padding:3px 8px;font-size:11px"
                 onclick="editZone(${JSON.stringify(z).replace(/"/g,'&quot;')})">แก้ไข</button>
