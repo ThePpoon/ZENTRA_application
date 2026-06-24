@@ -151,9 +151,12 @@ class _InferenceWorker(threading.Thread):
 
 
 class _Meta:
-    __slots__ = ("frame_id",)
-    def __init__(self, fid: int):
+    __slots__ = ("frame_id", "tracks")
+    def __init__(self, fid: int, tracks=None):
         self.frame_id = fid
+        # None  = caller did not run tracking (module falls back to its own)
+        # list  = shared single-pass tracks (possibly empty = no persons)
+        self.tracks = tracks
 
 
 # ================================================================
@@ -610,6 +613,15 @@ class Pipeline:
             seen_ppe_classes: set[str] = set()
             ppe_validated    = (local_ppe is not None)
 
+            # Single-pass person tracker shared by ALL modules so PPE / Zone /
+            # Heat reference the SAME persistent track IDs (consistency + perf).
+            from utils.tracker import ByteTracker
+            person_tracker = ByteTracker(
+                track_thresh=getattr(cfg, "BYTETRACK_TRACK_THRESH", 0.5),
+                track_buffer=getattr(cfg, "BYTETRACK_TRACK_BUFFER", 30),
+                match_thresh=getattr(cfg, "BYTETRACK_MATCH_THRESH", 0.8),
+            )
+
             print("[Pipeline] ▶️  Process loop running")
 
             while not self._stop_evt.is_set() and self._running:
@@ -651,7 +663,12 @@ class Pipeline:
                 annotated = ppe_module.draw_predictions(annotated, last_ppe_preds)
                 annotated = fall_module.draw_fall_predictions(annotated, last_fall_preds)
 
-                meta = _Meta(frame_id)
+                # Run the shared person tracker once per frame and expose the
+                # tracks via meta so every module uses the same IDs.
+                person_dets = [p for p in last_ppe_preds
+                               if str(p.get("class", "")).lower() == "person"]
+                tracks = person_tracker.update(person_dets)
+                meta = _Meta(frame_id, tracks)
 
                 # Pass empty window_title — modules skip cv2.imshow().
                 # MediaPipe Pose (fall_module.on_frame) is heavy, so run it only in
