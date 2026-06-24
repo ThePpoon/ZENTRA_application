@@ -72,6 +72,11 @@ PPE_HOLD_SEC         = float(os.getenv("PPE_HOLD_SEC", "0.5"))
 PPE_SMOOTH           = os.getenv("PPE_SMOOTH", "true").lower() == "true"
 PPE_SMOOTH_ALPHA     = float(os.getenv("PPE_SMOOTH_ALPHA", "0.4"))
 PPE_SMOOTH_IOU       = float(os.getenv("PPE_SMOOTH_IOU", "0.30"))
+# De-duplicate overlapping boxes of the SAME class (one object → one box).
+# Predicting at a low floor returns extra overlapping candidates; suppress any
+# same-class box overlapping an already-kept one above this IoU. 0.70 only
+# removes near-identical duplicates (keeps two distinct-but-close people).
+PPE_NMS_IOU          = float(os.getenv("PPE_NMS_IOU", "0.70"))
 # One shared inference client serves both PPE and Fall. Keep the server-side
 # confidence floor LOW so neither model starves the other; the real PPE
 # threshold (INFERENCE_CONFIDENCE) is applied in code and Fall uses
