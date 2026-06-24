@@ -64,6 +64,11 @@ USE_DSHOW       = os.getenv("USE_DSHOW", "true").lower() == "true"
 INFERENCE_CONFIDENCE = float(os.getenv("INFERENCE_CONFIDENCE", "0.45"))
 INFERENCE_IOU        = float(os.getenv("INFERENCE_IOU",        "0.45"))
 INFER_EVERY_N_FRAMES = int(os.getenv("INFER_EVERY_N_FRAMES",   "3"))
+# One shared inference client serves both PPE and Fall. Keep the server-side
+# confidence floor LOW so neither model starves the other; the real PPE
+# threshold (INFERENCE_CONFIDENCE) is applied in code and Fall uses
+# FALL_YOLO_CONFIDENCE — so the PPE slider can't throttle fall detection.
+INFERENCE_SERVER_FLOOR = float(os.getenv("INFERENCE_SERVER_FLOOR", "0.20"))
 
 # ================================================================
 # PPE CLASSES
@@ -89,7 +94,12 @@ PPE_CLASSES: dict[str, dict] = {
     "no boots":        {"label": "No Boots",  "label_th": "ไม่สวมรองเท้าบูท", "color": (0, 0, 220),   "violation": True},
     "person":          {"label": "Person",    "label_th": "บุคคล",              "color": (255, 190, 0), "violation": False},
 }
-REQUIRED_PPE = {"helmet", "vest"}
+# NOTE: PPE violation detection does NOT compute "person without helmet" — it
+# relies on the model emitting explicit negative classes (e.g. "no helmet",
+# "no vest") which modules/ppe.py flags via PPE_CLASSES[...]["violation"].
+# Both current models (cloud ppe-cpxsz/2, local ppe_finetuned.pt) provide these
+# plus "person" for Zone tracking. The pipeline logs a warning at runtime if a
+# loaded model is missing those classes (see Pipeline._validate_ppe_classes).
 
 # ================================================================
 # MEDIAPIPE — Slide Module 3: 33 Keypoints, 3 Detection Methods
@@ -106,6 +116,9 @@ GAIT_ANOMALY_THRESH           = 0.20
 FALL_MODE                 = os.getenv("FALL_MODE", "hybrid")
 FALL_YOLO_CONFIDENCE      = float(os.getenv("FALL_YOLO_CONFIDENCE", "0.50"))
 FALL_YOLO_CONFIRM_FRAMES  = int(os.getenv("FALL_YOLO_CONFIRM_FRAMES", "4"))
+# MediaPipe Pose is heavy. Run it only every Nth frame (and never in 'yolo'
+# mode) so it doesn't cap the live pipeline FPS / freeze the Live view.
+FALL_POSE_EVERY_N         = int(os.getenv("FALL_POSE_EVERY_N", "3"))
 
 # ================================================================
 # BYTETRACK — Slide Module 2: Multi-Object Tracking
@@ -159,9 +172,15 @@ ALERT_RECIPIENTS: dict[str, list[str]] = {
 }
 
 DAILY_REPORT_TIME = os.getenv("DAILY_REPORT_TIME", "20:00")
+# External public image host used ONLY when LINE_UPLOAD_IMAGES is opted-in.
+# LINE push image messages require a public HTTPS URL we must host ourselves —
+# LINE provides no upload-and-get-URL endpoint — so attaching a photo to a LINE
+# alert unavoidably sends it through an external host.
 IMAGE_UPLOAD_URL  = "https://catbox.moe/user/api.php"
-# PDPA: when False, LINE alerts are text-only (no person image leaves the device)
-LINE_UPLOAD_IMAGES = os.getenv("LINE_UPLOAD_IMAGES", "true").lower() == "true"
+# PDPA: default OFF so no person image ever leaves the device. Evidence photos
+# are still kept locally (History). Turn on only with explicit consent — then
+# LINE alerts attach the photo via IMAGE_UPLOAD_URL above.
+LINE_UPLOAD_IMAGES = os.getenv("LINE_UPLOAD_IMAGES", "false").lower() == "true"
 
 # ================================================================
 # DATA COLLECTION
