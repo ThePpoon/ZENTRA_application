@@ -650,6 +650,8 @@ class Pipeline:
             frame_id         = 0
             last_ppe_preds   = []
             last_fall_preds  = []
+            last_ppe_ts      = 0.0     # when last_ppe_preds was last refreshed (anti-flicker hold)
+            ppe_hold         = float(getattr(cfg, "PPE_HOLD_SEC", 0.5))
             read_failures    = 0
             is_file          = (cfg.CAMERA_SOURCE == "file")
             is_webcam        = (cfg.CAMERA_SOURCE == "webcam")
@@ -696,7 +698,15 @@ class Pipeline:
 
                 res = inf_worker.get_result()
                 if res:
-                    _, last_ppe_preds, last_fall_preds = res
+                    _, new_ppe, last_fall_preds = res
+                    # Anti-flicker: refresh on a real detection; on a momentary
+                    # empty result keep the previous boxes until the hold expires
+                    # (stops boxes blinking while a person stands still).
+                    nowt = time.time()
+                    if new_ppe:
+                        last_ppe_preds, last_ppe_ts = new_ppe, nowt
+                    elif (nowt - last_ppe_ts) > ppe_hold:
+                        last_ppe_preds = []
                     if not ppe_validated:
                         for p in last_ppe_preds:
                             seen_ppe_classes.add(str(p.get("class", "")).lower())
