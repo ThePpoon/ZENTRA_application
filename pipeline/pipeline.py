@@ -102,21 +102,29 @@ class _InferenceWorker(threading.Thread):
         self._stop     = threading.Event()
 
     def run(self):
+        import config as cfg
         while not self._stop.is_set():
             try:
                 fid, frame = self.in_q.get(timeout=0.5)
             except queue.Empty:
                 continue
             try:
+                # Read PPE confidence fresh each loop so the Settings slider applies
+                # live (local model also honours it now). Fall is filtered separately
+                # by FALL_YOLO_CONFIDENCE in heat_stroke, so PPE conf never throttles it.
+                ppe_conf = float(getattr(cfg, "INFERENCE_CONFIDENCE", 0.4))
                 ppe_preds, fall_preds = [], []
                 if self.local_ppe is not None:
                     # PPE from the locally fine-tuned YOLOv8 model
-                    r = self.local_ppe.predict(frame, conf=self.conf, verbose=False)
+                    r = self.local_ppe.predict(frame, conf=ppe_conf, verbose=False)
                     if r:
                         ppe_preds = _yolo_to_roboflow(r[0])
                 elif self.client:
+                    # Server returns low-floor candidates; filter PPE in code by the
+                    # live PPE threshold (keeps fall detections independent).
                     r1 = self.client.infer(frame, model_id=self.ppe_id)
-                    ppe_preds = r1.get("predictions", [])
+                    ppe_preds = [p for p in r1.get("predictions", [])
+                                 if p.get("confidence", 0.0) >= ppe_conf]
                 # Fall always via the Roboflow server (MediaPipe pose also covers it)
                 if self.client:
                     try:
@@ -170,8 +178,10 @@ class Pipeline:
         self._flip_override: Optional[bool] = None   # None = auto (mirror webcam)
         self._inf_client = None                       # InferenceHTTPClient ref
 
-        # Called on every real alert: (msg: str, level: str) → None
-        self.on_alert: Optional[Callable[[str, str], None]] = None
+        # Called on every real alert: (msg: str, level: str, line_sent: bool) → None
+        # line_sent reflects whether the LINE push was actually dispatched (a
+        # recipient exists and it wasn't suppressed by cooldown).
+        self.on_alert: Optional[Callable[[str, str, bool], None]] = None
         # Called whenever pipeline status changes: (status: dict) → None
         self.on_status: Optional[Callable[[dict], None]] = None
 
@@ -402,10 +412,12 @@ class Pipeline:
                         pipeline.status["alerts"]["warning"] += 1
                     if level == "emergency":
                         pipeline.status["last_emergency"] = msg
-                # Fire external callback (for WebSocket broadcast)
+                # Fire external callback (for WebSocket broadcast + local history).
+                # Pass the real LINE dispatch result so history records line_sent
+                # accurately (the event is always logged locally regardless — PDPA).
                 if pipeline.on_alert:
                     try:
-                        pipeline.on_alert(msg, level)
+                        pipeline.on_alert(msg, level, bool(result))
                     except Exception as cb_e:
                         print(f"[Pipeline] on_alert callback: {cb_e}")
                 return result
@@ -446,8 +458,12 @@ class Pipeline:
         try:
             from inference_sdk import InferenceConfiguration
             import config as cfg
+            # Use a low server-side floor so BOTH models return candidates; the real
+            # PPE threshold is applied in code (_InferenceWorker) and the fall
+            # threshold in heat_stroke. This stops the PPE slider from silently
+            # raising the fall model's threshold (they share one client).
             self._inf_client.configure(InferenceConfiguration(
-                confidence_threshold=float(cfg.INFERENCE_CONFIDENCE),
+                confidence_threshold=float(getattr(cfg, "INFERENCE_SERVER_FLOOR", 0.20)),
                 iou_threshold=float(cfg.INFERENCE_IOU),
                 class_agnostic_nms=True,
             ))
@@ -468,10 +484,34 @@ class Pipeline:
             from ultralytics import YOLO
             model = YOLO(str(path))
             print(f"[Pipeline] 🧠 PPE = local fine-tuned model: {path.name}")
+            # Warn loudly if this model lacks the classes PPE/Zone depend on,
+            # so swapping in a bad model fails visibly instead of silently.
+            self._validate_ppe_classes(getattr(model, "names", {}).values()
+                                       if hasattr(model, "names") else [],
+                                       "local fine-tuned")
             return model
         except Exception as e:
             print(f"[Pipeline] local model load failed ({e}) → using Roboflow model")
             return None
+
+    @staticmethod
+    def _validate_ppe_classes(names, source: str):
+        """Log whether the active PPE model exposes the classes downstream modules
+        rely on: 'person' (Safety Zone tracking) and at least one violation class
+        (PPE alerts). Prevents silent breakage when a model is swapped."""
+        import config as cfg
+        norm = {str(n).lower() for n in names}
+        if not norm:
+            return
+        has_person    = any("person" in n for n in norm)
+        has_violation = any(cfg.PPE_CLASSES.get(n, {}).get("violation") for n in norm)
+        print(f"[Pipeline] PPE model ({source}) classes: {sorted(norm)}")
+        if not has_person:
+            print("[Pipeline] ⚠️  PPE model has NO 'person' class → Safety Zone will not detect intruders")
+        if not has_violation:
+            print("[Pipeline] ⚠️  PPE model has NO violation class (no_helmet/no_vest/...) → PPE alerts will not fire")
+        if has_person and has_violation:
+            print("[Pipeline] ✅ PPE class check OK (person + violation classes present)")
 
     def _make_client(self):
         try:
@@ -564,6 +604,11 @@ class Pipeline:
             read_failures    = 0
             is_file          = (cfg.CAMERA_SOURCE == "file")
             is_webcam        = (cfg.CAMERA_SOURCE == "webcam")
+            # Cloud model class names aren't known up-front; log the classes it
+            # actually emits once, for debugging model swaps (local is validated
+            # at load time instead).
+            seen_ppe_classes: set[str] = set()
+            ppe_validated    = (local_ppe is not None)
 
             print("[Pipeline] ▶️  Process loop running")
 
@@ -594,6 +639,13 @@ class Pipeline:
                 res = inf_worker.get_result()
                 if res:
                     _, last_ppe_preds, last_fall_preds = res
+                    if not ppe_validated:
+                        for p in last_ppe_preds:
+                            seen_ppe_classes.add(str(p.get("class", "")).lower())
+                        if frame_id >= 250:
+                            ppe_validated = True
+                            if seen_ppe_classes:
+                                print(f"[Pipeline] PPE model (cloud) classes seen: {sorted(seen_ppe_classes)}")
 
                 annotated = raw.copy()
                 annotated = ppe_module.draw_predictions(annotated, last_ppe_preds)
@@ -601,8 +653,16 @@ class Pipeline:
 
                 meta = _Meta(frame_id)
 
-                # Pass empty window_title — modules skip cv2.imshow()
-                fall_module.on_frame(annotated, meta, "")
+                # Pass empty window_title — modules skip cv2.imshow().
+                # MediaPipe Pose (fall_module.on_frame) is heavy, so run it only in
+                # modes that use pose and only every Nth frame — otherwise it caps
+                # the live FPS and freezes the Live view (H1). 'yolo' mode skips it.
+                fall_mode  = getattr(cfg, "FALL_MODE", "hybrid").lower()
+                pose_every = max(1, getattr(cfg, "FALL_POSE_EVERY_N", 3))
+                if (getattr(fall_module, "MP_OK", False)
+                        and fall_mode in ("hybrid", "pose")
+                        and frame_id % pose_every == 0):
+                    fall_module.on_frame(annotated, meta, "")
                 zone_module.on_frame(annotated, meta, "")
                 ppe_module.on_frame(annotated, meta, "")
 

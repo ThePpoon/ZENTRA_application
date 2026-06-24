@@ -37,9 +37,10 @@
       <button class="btn btn-ghost btn-sm" onclick="toggleToken()">แสดง / แก้ไข</button>
     </div>
     <div class="toggle-wrap mt-2">
-      <label class="toggle"><input type="checkbox" id="tog-upload-img" checked>
+      <label class="toggle"><input type="checkbox" id="tog-upload-img">
       <div class="toggle-track"></div><div class="toggle-thumb"></div></label>
-      <span class="text-sub">แนบภาพไปกับ LINE (ปิดเพื่อความเป็นส่วนตัว/PDPA — ส่งเป็นข้อความล้วน)</span>
+      <span class="text-sub">แนบภาพหลักฐานไปกับ LINE — <b>ปิดอยู่ (แนะนำตาม PDPA)</b> ส่งเป็นข้อความล้วน<br>
+      <span class="text-xs" style="color:var(--orange)">⚠ ถ้าเปิด: ภาพคนจะถูกส่งผ่านโฮสต์ภายนอก (catbox.moe) — ออกนอกเครื่อง</span></span>
     </div>
   </div>
 
@@ -311,8 +312,16 @@
     <div class="card">
       <p class="text-sub text-sm" style="line-height:1.7;margin-bottom:10px">
         🔒 ข้อมูลทั้งหมด (เหตุการณ์ + ภาพหลักฐาน + dataset) จัดเก็บ<b>ภายในเครื่องนี้เท่านั้น</b>
-        (SQLite + โฟลเดอร์ <code>data/</code>) ไม่ส่งออกนอกเครื่อง สอดคล้องหลัก PDPA
+        (SQLite + โฟลเดอร์ <code>data/</code>) สอดคล้องหลัก PDPA<br>
+        <span class="text-xs text-muted">ข้อยกเว้นเดียว: การ "แนบภาพไปกับ LINE" (ตั้งค่าหน้าการแจ้งเตือน LINE)
+        ซึ่ง<b>ปิดไว้เป็นค่าเริ่มต้น</b> — เปิดเมื่อยินยอมเท่านั้น</span>
       </p>
+      <div class="input-row" style="align-items:center;gap:8px;margin-bottom:12px">
+        <span class="text-sub text-sm">เก็บข้อมูลย้อนหลังไม่เกิน</span>
+        <input class="cooldown-input" id="retention-days" type="number" min="0" max="3650"
+               value="90" style="width:70px" onchange="setRetention(this.value)">
+        <span class="text-sub text-sm">วัน · ข้อมูลเก่ากว่านี้จะถูกลบอัตโนมัติเมื่อเปิดโปรแกรม (0 = เก็บถาวร)</span>
+      </div>
       <button class="btn btn-danger btn-sm" onclick="clearHistory()">ลบประวัติเหตุการณ์ + ภาพหลักฐานทั้งหมด</button>
     </div>
   </div>
@@ -392,7 +401,7 @@ function showSection(name, el) {
     const togW = document.getElementById('tog-warning'); if (togW) togW.checked = alerts.warning_enabled ?? true;
     const togA = document.getElementById('tog-alert');   if (togA) togA.checked = alerts.alert_enabled   ?? true;
     const togE = document.getElementById('tog-emergency');if (togE) togE.checked = alerts.emergency_enabled?? true;
-    const tu = document.getElementById('tog-upload-img'); if (tu) tu.checked = alerts.upload_images !== false;
+    const tu = document.getElementById('tog-upload-img'); if (tu) tu.checked = alerts.upload_images === true;
   }
   if (name === 'camera') {
     const cam = _settings.camera || {};
@@ -411,6 +420,9 @@ function showSection(name, el) {
     loadMetrics();
     const ulm = document.getElementById('use-local-model');
     if (ulm) ulm.checked = !!(_settings.ai && _settings.ai.use_local_model);
+    const rd = document.getElementById('retention-days');
+    if (rd) rd.value = (_settings.data && _settings.data.retention_days != null)
+      ? _settings.data.retention_days : 90;
     const srcSel = document.getElementById('train-source');
     if (srcSel) {
       srcSel.onchange = () => {
@@ -514,6 +526,18 @@ async function loadMetrics() {
 async function setLocalModel(on) {
   _settings.ai = _settings.ai || {};
   _settings.ai.use_local_model = !!on;
+  try {
+    await fetch('/api/settings', {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(_settings),
+    });
+  } catch (_) {}
+}
+
+async function setRetention(v) {
+  const n = Math.max(0, parseInt(v, 10) || 0);
+  _settings.data = _settings.data || {};
+  _settings.data.retention_days = n;
   try {
     await fetch('/api/settings', {
       method: 'POST', headers: {'Content-Type':'application/json'},

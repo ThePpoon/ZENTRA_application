@@ -89,6 +89,18 @@ async def _startup():
 
     _loop = asyncio.get_running_loop()
 
+    # PDPA data minimisation: drop events + evidence snapshots older than the
+    # configured retention window (local only). Runs once at startup.
+    try:
+        rdays = int((_load_settings().get("data") or {}).get("retention_days", 0) or 0)
+        if rdays > 0:
+            from server import store
+            removed = store.purge_before(rdays)
+            if removed:
+                print(f"[API] PDPA retention: purged {removed} event(s) older than {rdays} day(s)")
+    except Exception as e:
+        print(f"[API] retention purge skipped: {e}")
+
     try:
         # Import Pipeline (adds ZENTRA backend to sys.path, imports cv2/numpy)
         from pipeline.pipeline          import Pipeline
@@ -97,7 +109,7 @@ async def _startup():
         pipeline = Pipeline()
 
         # Wire alert callback → WebSocket broadcast + history
-        def _on_alert(msg: str, level: str):
+        def _on_alert(msg: str, level: str, line_sent: bool = True):
             # Capture an evidence snapshot (local only) of the current frame
             snap = None
             try:
@@ -105,7 +117,8 @@ async def _startup():
             except Exception:
                 snap = None
             from server import store
-            event = store.add_event(level=level, message=msg, camera="Cam 1", frame_jpeg=snap)
+            event = store.add_event(level=level, message=msg, camera="Cam 1",
+                                    frame_jpeg=snap, line_sent=line_sent)
             # Authoritative counts from the pipeline (avoids client drift)
             with pipeline._lock:
                 alerts = dict(pipeline.status.get("alerts", {}))
@@ -246,7 +259,7 @@ async def pipeline_start(body: dict[str, Any]):
     loop   = asyncio.get_running_loop()
     ok     = await loop.run_in_executor(None, pipeline.start, src_cfg)
     if not ok:
-        return JSONResponse({"ok": False, "error": "カメラを開けません"}, status_code=400)
+        return JSONResponse({"ok": False, "error": "ไม่สามารถเปิดกล้อง / แหล่งภาพได้"}, status_code=400)
 
     return JSONResponse({"ok": True, "source": source})
 
@@ -345,7 +358,9 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
         "warning_enabled": True,
         "alert_enabled":   True,
         "emergency_enabled": True,
-        "upload_images":   True,
+        # PDPA: OFF by default — LINE alerts are text-only, no image leaves the
+        # device. Opt-in sends evidence photos via an external public host.
+        "upload_images":   False,
     },
     "camera": {
         "source": "webcam",
@@ -357,6 +372,11 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
     "display": {
         "stream_fps": 10,
         "stream_jpeg_quality": 70,
+    },
+    "data": {
+        # PDPA data minimisation: auto-delete events + snapshots older than N days
+        # on startup. 0 = keep forever.
+        "retention_days": 90,
     },
 }
 
