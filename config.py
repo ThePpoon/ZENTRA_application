@@ -63,7 +63,10 @@ USE_DSHOW       = os.getenv("USE_DSHOW", "true").lower() == "true"
 # ================================================================
 INFERENCE_CONFIDENCE = float(os.getenv("INFERENCE_CONFIDENCE", "0.45"))
 INFERENCE_IOU        = float(os.getenv("INFERENCE_IOU",        "0.45"))
-INFER_EVERY_N_FRAMES = int(os.getenv("INFER_EVERY_N_FRAMES",   "3"))
+INFER_EVERY_N_FRAMES = int(os.getenv("INFER_EVERY_N_FRAMES",   "2"))   # PPE is ~11ms on GPU → infer more often (less flicker)
+# Anti-flicker: keep the last PPE boxes this long to bridge single-frame misses
+# (detector occasionally drops a frame → boxes blink). 0 = no hold.
+PPE_HOLD_SEC         = float(os.getenv("PPE_HOLD_SEC", "0.5"))
 # One shared inference client serves both PPE and Fall. Keep the server-side
 # confidence floor LOW so neither model starves the other; the real PPE
 # threshold (INFERENCE_CONFIDENCE) is applied in code and Fall uses
