@@ -192,9 +192,14 @@ def on_data(data: dict, metadata, frame: Optional[np.ndarray] = None):
     if not ready_zones:
         return
 
-    predictions = data.get("predictions") or []
-    person_dets = [p for p in predictions if p.get("class", "").lower() == "person"]
-    tracks      = _tracker.update(person_dets)
+    # Prefer the pipeline's shared single-pass tracks (same IDs across modules).
+    # Fall back to a local tracker only when run standalone (metadata.tracks is
+    # None). An empty list means "tracked, but no persons this frame".
+    tracks = getattr(metadata, "tracks", None)
+    if tracks is None:
+        predictions = data.get("predictions") or []
+        person_dets = [p for p in predictions if p.get("class", "").lower() == "person"]
+        tracks      = _tracker.update(person_dets)
 
     if frame is not None:
         draw_tracks(frame, tracks)

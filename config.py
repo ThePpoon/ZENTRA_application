@@ -125,7 +125,11 @@ FALL_POSE_EVERY_N         = int(os.getenv("FALL_POSE_EVERY_N", "3"))
 # ================================================================
 BYTETRACK_TRACK_THRESH = 0.50
 BYTETRACK_TRACK_BUFFER = 30
-BYTETRACK_MATCH_THRESH = 0.80
+# IoU gate for matching a track to a detection. Our ByteTracker has NO motion
+# model (no Kalman), so at 10 fps a walking person can drop below a high IoU
+# between frames and get a NEW id (id churn breaks per-track logic). 0.50
+# tolerates normal frame-to-frame motion while still rejecting unrelated boxes.
+BYTETRACK_MATCH_THRESH = float(os.getenv("BYTETRACK_MATCH_THRESH", "0.50"))
 
 # ================================================================
 # SAFETY ZONE — Slide Module 2
