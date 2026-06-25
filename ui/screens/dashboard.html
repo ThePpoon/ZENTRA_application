@@ -4,11 +4,26 @@
 
   <!-- KPI strip -->
   <div class="dashboard-kpis">
-    <div class="kpi-tile"><div class="kpi-val" id="kpi-total">0</div><div class="kpi-lbl">เหตุการณ์รวมวันนี้</div></div>
-    <div class="kpi-tile" id="kpi-tile-warning"><div class="kpi-val" id="kpi-warning">0</div><div class="kpi-lbl">เฝ้าระวัง (Warning)</div></div>
-    <div class="kpi-tile" id="kpi-tile-emergency"><div class="kpi-val" id="kpi-emergency">0</div><div class="kpi-lbl">ฉุกเฉิน (Emergency)</div></div>
-    <div class="kpi-tile"><div class="kpi-val" id="kpi-uptime">0:00</div><div class="kpi-lbl">เวลาทำงาน</div></div>
-    <div class="kpi-tile"><div class="kpi-val" id="kpi-modules">0/3</div><div class="kpi-lbl">โมดูลพร้อมทำงาน</div></div>
+    <div class="kpi-tile" data-accent="info">
+      <div class="kpi-ico">📋</div>
+      <div class="kpi-meta"><div class="kpi-val" id="kpi-total">0</div><div class="kpi-lbl">เหตุการณ์รวมวันนี้</div></div>
+    </div>
+    <div class="kpi-tile" data-accent="warn" id="kpi-tile-warning">
+      <div class="kpi-ico">⚠️</div>
+      <div class="kpi-meta"><div class="kpi-val" id="kpi-warning">0</div><div class="kpi-lbl">เฝ้าระวัง</div></div>
+    </div>
+    <div class="kpi-tile" data-accent="alarm" id="kpi-tile-emergency">
+      <div class="kpi-ico">🆘</div>
+      <div class="kpi-meta"><div class="kpi-val" id="kpi-emergency">0</div><div class="kpi-lbl">ฉุกเฉิน</div></div>
+    </div>
+    <div class="kpi-tile" data-accent="ok">
+      <div class="kpi-ico">⏱️</div>
+      <div class="kpi-meta"><div class="kpi-val" id="kpi-uptime">0:00</div><div class="kpi-lbl">เวลาทำงาน</div></div>
+    </div>
+    <div class="kpi-tile" data-accent="info">
+      <div class="kpi-ico">🧩</div>
+      <div class="kpi-meta"><div class="kpi-val" id="kpi-modules">0/3</div><div class="kpi-lbl">โมดูลพร้อม</div></div>
+    </div>
   </div>
 
   <div class="app-body">
@@ -62,6 +77,14 @@
           <button class="emergency-more" title="ดูรายละเอียด" onclick="ZENTRA.navigate('history')">···</button>
         </div>
 
+        <!-- Today activity mini chart -->
+        <div>
+          <div class="panel-section-title">กิจกรรมวันนี้ (รายชั่วโมง)</div>
+          <div class="card" style="padding:10px 10px 4px">
+            <canvas id="dash-hourly" style="width:100%;max-height:110px"></canvas>
+          </div>
+        </div>
+
         <!-- Alarm Priority list -->
         <div style="flex:1; display:flex; flex-direction:column; min-height:0;">
           <div class="panel-section-title">การแจ้งเตือนล่าสุด</div>
@@ -81,9 +104,33 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
+function loadDashHourly() {
+  var canvas = document.getElementById('dash-hourly');
+  if (!canvas || typeof Chart === 'undefined') return;
+  fetch('/api/history/hourly').then(function (r) { return r.json(); }).then(function (data) {
+    var labels = Array.from({ length: 24 }, function (_, h) { return String(h).padStart(2, '0'); });
+    var values = labels.map(function (h) { return data[h] || 0; });
+    if (ZENTRA._dashChart) ZENTRA._dashChart.destroy();
+    ZENTRA._dashChart = new Chart(canvas.getContext('2d'), {
+      type: 'bar',
+      data: { labels: labels, datasets: [{ data: values, backgroundColor: 'rgba(59,130,246,0.7)', borderRadius: 3, maxBarThickness: 13 }] },
+      options: {
+        responsive: true, maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { ticks: { color: '#9AA0B8', font: { size: 8 } }, grid: { display: false } },
+          y: { beginAtZero: true, ticks: { color: '#9AA0B8', font: { size: 8 }, stepSize: 1, precision: 0 }, grid: { color: 'rgba(255,255,255,0.06)' } },
+        },
+      },
+    });
+  }).catch(function () {});
+}
+
 function init_dashboard() {
   document.getElementById('camera-label').textContent = ZENTRA.state.camera_label;
+  loadDashHourly();
 
   // Restore last video frame immediately (no blank feed when returning)
   if (ZENTRA._lastFrame) {
