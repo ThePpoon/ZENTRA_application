@@ -83,7 +83,6 @@
 
 <script>
 function init_dashboard() {
-  document.getElementById('navbar-mount').innerHTML = renderNavbar('dashboard');
   document.getElementById('camera-label').textContent = ZENTRA.state.camera_label;
 
   // Restore last video frame immediately (no blank feed when returning)

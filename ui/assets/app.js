@@ -30,6 +30,11 @@ const ZENTRA = {
       container.innerHTML = html;
       ZENTRA._currentScreen = screenId;
 
+      // Left sidebar for main screens; full-screen for splash/source
+      const SHELL = ['dashboard', 'zone_editor', 'history', 'settings'];
+      if (SHELL.includes(screenId)) ZENTRA.mountSidebar(screenId);
+      else ZENTRA.hideSidebar();
+
       // innerHTML does NOT auto-execute <script> tags — re-create them.
       // Re-creating a <script> element makes the browser execute it in
       // GLOBAL scope (eval() would only define functions locally, so
@@ -271,35 +276,56 @@ const ZENTRA = {
   },
 };
 
-/* ─── Navbar helper (injected into screens that need it) ─── */
-function renderNavbar(activeTab) {
-  const tabs = [
-    { id: 'dashboard',    label: 'Live Dashboard' },
-    { id: 'zone_editor',  label: 'Zone Editor'    },
-    { id: 'history',      label: 'History'        },
-    { id: 'settings',     label: 'Setting'        },
+/* ─── Left Sidebar (persistent, lives in <body> so it survives #app swaps) ─── */
+function renderSidebar(active) {
+  const groups = [
+    { label: 'หลัก', items: [
+      { id: 'dashboard',   ico: '📊', label: 'Dashboard'   },
+      { id: 'zone_editor', ico: '🗺️', label: 'Zone Editor' },
+    ]},
+    { label: 'เหตุการณ์', items: [
+      { id: 'history', ico: '🕘', label: 'History' },
+    ]},
+    { label: 'ตั้งค่า', items: [
+      { id: 'settings', ico: '⚙️', label: 'Settings' },
+    ]},
   ];
-  const tabsHtml = tabs.map(t =>
-    `<button class="nav-tab${t.id === activeTab ? ' active' : ''}"
-       onclick="ZENTRA.navigate('${t.id}')">${t.label}</button>`
-  ).join('');
+  const nav = groups.map(g => `
+    <div class="sb-group-label">${g.label}</div>
+    ${g.items.map(it => `
+      <button class="sb-item${it.id === active ? ' active' : ''}" onclick="ZENTRA.navigate('${it.id}')">
+        <span class="sb-ico">${it.ico}</span><span>${it.label}</span>
+      </button>`).join('')}`).join('');
 
   return `
-    <nav class="navbar">
-      <div class="navbar-brand">
-        <span class="brand-mark">Z</span>
-        <div>
-          <span class="brand-text">ZENTRA</span>
-          <span class="brand-sub">Safety AI System</span>
-        </div>
-      </div>
-      <div class="navbar-tabs">${tabsHtml}</div>
-      <div class="navbar-status">
-        <span class="nav-clock" id="nav-clock">--:--:--</span>
-        <span class="sys-pill ok" id="sys-pill"><span class="sys-dot"></span><span id="sys-pill-text">ระบบปกติ</span></span>
-      </div>
-    </nav>`;
+    <div class="sb-brand">
+      <span class="brand-mark">Z</span>
+      <div><span class="brand-text">ZENTRA</span><span class="brand-sub">Safety AI System</span></div>
+    </div>
+    <nav class="sb-nav">${nav}</nav>
+    <div class="sb-footer">
+      <span class="nav-clock" id="nav-clock">--:--:--</span>
+      <span class="sys-pill ok" id="sys-pill"><span class="sys-dot"></span><span id="sys-pill-text">ระบบปกติ</span></span>
+    </div>`;
 }
+
+ZENTRA.mountSidebar = function (active) {
+  let sb = document.getElementById('app-sidebar');
+  if (!sb) {
+    sb = document.createElement('aside');
+    sb.id = 'app-sidebar';
+    document.body.appendChild(sb);
+  }
+  sb.innerHTML = renderSidebar(active);
+  sb.style.display = 'flex';
+  document.body.classList.add('with-sidebar');
+};
+
+ZENTRA.hideSidebar = function () {
+  const sb = document.getElementById('app-sidebar');
+  if (sb) sb.style.display = 'none';
+  document.body.classList.remove('with-sidebar');
+};
 
 /* ─── Header clock + system-status pill ───────────── */
 ZENTRA._headerTimer = null;

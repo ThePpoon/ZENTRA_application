@@ -356,7 +356,6 @@
 var _settings = {};
 
 function init_settings() {
-  document.getElementById('navbar-mount').innerHTML = renderNavbar('settings');
   loadSettings().then(() => showSection('line', document.querySelector('.settings-menu-item[data-section="line"]')));
 }
 

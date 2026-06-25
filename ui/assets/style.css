@@ -189,6 +189,67 @@ input, select, textarea { font-family: var(--font); }
 .sys-pill.alarm .sys-dot { background: var(--emergency); animation: pulse-dot 1.2s infinite; }
 
 /* ══════════════════════════════════════════════════
+   LEFT SIDEBAR (persistent, Protex-style)
+   ══════════════════════════════════════════════════ */
+#app-sidebar {
+  position: fixed;
+  top: 0; left: 0;
+  width: var(--sidebar-w);
+  height: 100vh;
+  background: var(--bg-sidebar);
+  border-right: 1px solid var(--border);
+  display: none;            /* shown via JS (mountSidebar) */
+  flex-direction: column;
+  z-index: 30;
+}
+body.with-sidebar #app {
+  margin-left: var(--sidebar-w);
+  width: calc(100vw - var(--sidebar-w));
+}
+.sb-brand {
+  display: flex; align-items: center; gap: 10px;
+  padding: 16px 16px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+.sb-brand .brand-text { font-size: 15px; font-weight: 700; color: var(--accent); letter-spacing: 2px; display: block; line-height: 1; }
+.sb-brand .brand-sub  { font-size: 9px; color: var(--text-muted); letter-spacing: .5px; display: block; margin-top: 2px; }
+.sb-nav {
+  flex: 1; overflow-y: auto;
+  padding: 8px 8px 12px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.sb-group-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase; color: var(--text-muted);
+  padding: 14px 10px 4px;
+}
+.sb-item {
+  display: flex; align-items: center; gap: 11px;
+  width: 100%; padding: 9px 12px;
+  border: none; background: none;
+  color: var(--text-sub);
+  font-family: var(--font); font-size: 13.5px; font-weight: 500;
+  border-radius: var(--r);
+  border-left: 3px solid transparent;
+  text-align: left; cursor: pointer;
+  transition: background .15s, color .15s;
+}
+.sb-item:hover { background: var(--bg-hover); color: var(--text); }
+.sb-item.active {
+  background: var(--accent-dim); color: var(--accent);
+  border-left-color: var(--accent); font-weight: 600;
+}
+.sb-ico { width: 20px; text-align: center; font-size: 15px; flex-shrink: 0; }
+.sb-footer {
+  padding: 12px 14px;
+  border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 8px;
+  flex-shrink: 0;
+}
+.sb-footer .nav-clock { font-size: 13px; font-weight: 600; color: var(--text-sub); font-variant-numeric: tabular-nums; letter-spacing: .5px; }
+
+/* ══════════════════════════════════════════════════
    MAIN APP LAYOUT (Dashboard / Zone / History / Settings)
    ══════════════════════════════════════════════════ */
 .app-layout {
@@ -731,7 +792,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
 .history-layout {
   display: flex;
   flex-direction: column;
-  height: calc(100vh - var(--nav-h));
+  height: 100vh;
   overflow: hidden;
   padding: 16px 20px;
   gap: 14px;

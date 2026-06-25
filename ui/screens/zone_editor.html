@@ -71,8 +71,6 @@ var ZONE_COLORS = ['#ef4444','#f97316','#eab308','#22c55e','#3b82f6','#8b5cf6','
 
 /* ─── Init ─────────────────────────────────────── */
 function init_zone_editor() {
-  document.getElementById('navbar-mount').innerHTML = renderNavbar('zone_editor');
-
   ZE.canvas = document.getElementById('zone-canvas');
   ZE.ctx    = ZE.canvas.getContext('2d');
 
