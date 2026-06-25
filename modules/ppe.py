@@ -92,41 +92,77 @@ def draw_predictions(frame: np.ndarray, predictions: list[dict]) -> np.ndarray:
     return frame
 
 
+_FONT = cv2.FONT_HERSHEY_SIMPLEX
+# (chip label, violation class) for the per-person PPE checklist
+_PPE_CHECK = [("HELMET", "No Helmet"), ("VEST", "No Vest"),
+              ("GLOVES", "No Gloves"), ("GLASSES", "No Glasses")]
+
+
+def _rounded_rect(img, p1, p2, color, thickness=2, r=12):
+    """A rounded rectangle (cleaner than a plain box) — outline only."""
+    x1, y1 = p1; x2, y2 = p2
+    r = max(0, min(r, (x2 - x1) // 2, (y2 - y1) // 2))
+    cv2.line(img, (x1 + r, y1), (x2 - r, y1), color, thickness, cv2.LINE_AA)
+    cv2.line(img, (x1 + r, y2), (x2 - r, y2), color, thickness, cv2.LINE_AA)
+    cv2.line(img, (x1, y1 + r), (x1, y2 - r), color, thickness, cv2.LINE_AA)
+    cv2.line(img, (x2, y1 + r), (x2, y2 - r), color, thickness, cv2.LINE_AA)
+    cv2.ellipse(img, (x1 + r, y1 + r), (r, r), 180, 0, 90, color, thickness, cv2.LINE_AA)
+    cv2.ellipse(img, (x2 - r, y1 + r), (r, r), 270, 0, 90, color, thickness, cv2.LINE_AA)
+    cv2.ellipse(img, (x2 - r, y2 - r), (r, r),   0, 0, 90, color, thickness, cv2.LINE_AA)
+    cv2.ellipse(img, (x1 + r, y2 - r), (r, r),  90, 0, 90, color, thickness, cv2.LINE_AA)
+
+
+def _chip(frame, x, y, text, bg, fg=(255, 255, 255), scale=0.42, pad=5):
+    (tw, th), _ = cv2.getTextSize(text, _FONT, scale, 1)
+    cv2.rectangle(frame, (x, y), (x + tw + pad * 2, y + th + pad * 2), bg, -1)
+    cv2.putText(frame, text, (x + pad, y + th + pad), _FONT, scale, fg, 1, cv2.LINE_AA)
+    return x + tw + pad * 2 + 4   # next x (with gap)
+
+
 def draw_person_status(frame: np.ndarray, predictions: list[dict], tracks=None) -> np.ndarray:
-    """Clean 'control-room' display: ONE box per person + a compact PPE status
-    label, instead of many overlapping class boxes. Green = compliant,
-    red = missing PPE (listed). Uses ASCII text only (cv2 can't render Thai)."""
+    """Professional per-person display: ONE rounded box per person + a header
+    (ID · SAFE/PPE ALERT) + a PPE checklist (HELMET/VEST/GLOVES/GLASSES,
+    green=worn, red=missing). ASCII only (cv2 can't render Thai); no confidence %."""
+    H, W = frame.shape[:2]
     persons = [p for p in predictions if str(p.get("class", "")).lower() == "person"]
     viols   = [p for p in predictions if _info(p.get("class", ""))["violation"]]
     track_boxes = {t.track_id: list(t.bbox) for t in (tracks or [])}
 
+    GREEN, RED, WHITE = (76, 175, 80), (48, 48, 229), (255, 255, 255)
+
     for person in persons:
         pb = _pred_box(person)
-        x1, y1, x2, y2 = (int(v) for v in pb)
+        x1 = max(0, min(int(pb[0]), W - 1)); y1 = max(0, min(int(pb[1]), H - 1))
+        x2 = max(0, min(int(pb[2]), W - 1)); y2 = max(0, min(int(pb[3]), H - 1))
+        if x2 - x1 < 20 or y2 - y1 < 20:
+            continue
 
-        # Which violations sit on this person?
-        missing = sorted({_info(v.get("class", ""))["label"]
-                          for v in viols if _overlap_inside(_pred_box(v), pb) >= 0.30})
-        ok    = not missing
-        color = (0, 170, 0) if ok else (0, 0, 230)   # green / red (BGR)
+        missing = {_info(v.get("class", ""))["label"]
+                   for v in viols if _overlap_inside(_pred_box(v), pb) >= 0.30}
+        ok   = not missing
+        main = GREEN if ok else RED
 
-        # Match a track id (display only)
+        _rounded_rect(frame, (x1, y1), (x2, y2), main, 2, 14)
+
+        # match a track id (display only)
         tid, best = None, 0.5
         for k, tb in track_boxes.items():
             ov = _overlap_inside(pb, tb)
             if ov >= best:
                 best, tid = ov, k
 
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        # ── header bar: ID · status ──
+        head = (f"ID {tid}   " if tid is not None else "PERSON   ") + ("SAFE" if ok else "PPE ALERT")
+        (hw, hh), _ = cv2.getTextSize(head, _FONT, 0.55, 1)
+        cv2.rectangle(frame, (x1, y1), (x1 + hw + 14, y1 + hh + 10), main, -1)
+        cv2.putText(frame, head, (x1 + 7, y1 + hh + 3), _FONT, 0.55, WHITE, 1, cv2.LINE_AA)
 
-        prefix = f"ID{tid}  " if tid is not None else ""
-        text   = prefix + ("PPE OK" if ok else
-                           "MISSING: " + ", ".join(m.replace("No ", "") for m in missing))
-        (tw, th), _ = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.55, 1)
-        ly = max(y1, th + 10)
-        cv2.rectangle(frame, (x1, ly - th - 10), (x1 + tw + 12, ly), color, -1)
-        cv2.putText(frame, text, (x1 + 6, ly - 5), cv2.FONT_HERSHEY_SIMPLEX,
-                    0.55, (255, 255, 255), 1, cv2.LINE_AA)
+        # ── PPE checklist row ──
+        cx, cy = x1 + 2, y1 + hh + 14
+        for label, neg in _PPE_CHECK:
+            cx = _chip(frame, cx, cy, label, GREEN if neg not in missing else RED, WHITE)
+            if cx > W - 50:
+                break
     return frame
 
 

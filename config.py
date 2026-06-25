@@ -73,8 +73,11 @@ PPE_HOLD_SEC         = float(os.getenv("PPE_HOLD_SEC", "0.5"))
 # overlapping class boxes (Protex-style, far less cluttered).
 PPE_CLEAN_DISPLAY    = os.getenv("PPE_CLEAN_DISPLAY", "true").lower() == "true"
 PPE_SMOOTH           = os.getenv("PPE_SMOOTH", "true").lower() == "true"
-PPE_SMOOTH_ALPHA     = float(os.getenv("PPE_SMOOTH_ALPHA", "0.4"))
+PPE_SMOOTH_ALPHA     = float(os.getenv("PPE_SMOOTH_ALPHA", "0.25"))
 PPE_SMOOTH_IOU       = float(os.getenv("PPE_SMOOTH_IOU", "0.30"))
+# Deadband (px): if a box moved less than this, freeze it (rock-steady when a
+# person stands still; still follows real movement above the threshold).
+PPE_SMOOTH_DEADBAND  = float(os.getenv("PPE_SMOOTH_DEADBAND", "3.0"))
 # De-duplicate overlapping boxes of the SAME class (one object → one box).
 # Predicting at a low floor returns extra overlapping candidates; suppress any
 # same-class box overlapping an already-kept one above this IoU. 0.70 only
