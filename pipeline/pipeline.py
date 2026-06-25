@@ -110,7 +110,8 @@ class _BoxSmoother:
         union = (ax2 - ax1) * (ay2 - ay1) + (bx2 - bx1) * (by2 - by1) - inter + 1e-6
         return inter / union
 
-    def update(self, preds, now: float, alpha: float, iou_thr: float, ttl: float):
+    def update(self, preds, now: float, alpha: float, iou_thr: float, ttl: float,
+               deadband: float = 0.0):
         used = set()
         for p in preds:
             pb, cls = self._xyxy(p), p.get("class", "")
@@ -127,10 +128,15 @@ class _BoxSmoother:
                     "x": p.get("x", 0), "y": p.get("y", 0),
                     "width": p.get("width", 0), "height": p.get("height", 0), "ts": now})
                 used.add(len(self._items) - 1)
-            else:                                # EMA toward the new detection
+            else:                                # matched existing object
                 it = self._items[bj]
-                for k in ("x", "y", "width", "height"):
-                    it[k] = alpha * p.get(k, 0) + (1 - alpha) * it[k]
+                # Deadband: only move if the box changed more than `deadband` px
+                # (frozen → rock-steady while a person stands still).
+                moved = any(abs(p.get(k, 0) - it[k]) > deadband
+                            for k in ("x", "y", "width", "height"))
+                if moved:
+                    for k in ("x", "y", "width", "height"):
+                        it[k] = alpha * p.get(k, 0) + (1 - alpha) * it[k]
                 it["confidence"] = p.get("confidence", it["confidence"])
                 it["ts"] = now
                 used.add(bj)
@@ -823,9 +829,10 @@ class Pipeline:
                 if getattr(cfg, "PPE_SMOOTH", True):
                     disp_ppe = ppe_smoother.update(
                         last_ppe_preds, time.time(),
-                        getattr(cfg, "PPE_SMOOTH_ALPHA", 0.4),
+                        getattr(cfg, "PPE_SMOOTH_ALPHA", 0.25),
                         getattr(cfg, "PPE_SMOOTH_IOU", 0.30),
-                        getattr(cfg, "PPE_HOLD_SEC", 0.5))
+                        getattr(cfg, "PPE_HOLD_SEC", 0.5),
+                        getattr(cfg, "PPE_SMOOTH_DEADBAND", 3.0))
                     # Final guarantee: no overlapping duplicate boxes get drawn
                     disp_ppe = _nms_dedup(disp_ppe, getattr(cfg, "PPE_NMS_IOU", 0.70))
                 if getattr(cfg, "PPE_CLEAN_DISPLAY", True):
