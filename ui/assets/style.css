@@ -5,40 +5,40 @@
 
 @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
 
-/* ─── CSS Variables — Light "Control-Room" theme ──── */
+/* ─── CSS Variables — Dark "Professional" theme (Protex-style) ──── */
 :root {
-  --bg:           #dfe5ee;   /* app background — cooler grey for clear separation */
-  --bg-panel:     #ffffff;   /* side panels     */
-  --bg-card:      #ffffff;   /* cards           */
-  --bg-card-alt:  #f1f5f9;   /* subtle card     */
-  --bg-input:     #ffffff;
-  --bg-sidebar:   #ffffff;
-  --bg-hover:     rgba(15, 23, 42, 0.05);
-  --bg-video:     #0b1220;   /* video stays dark for contrast */
+  --bg:           #0D0F14;   /* app base (darkest)        */
+  --bg-panel:     #13161D;   /* panels / sidebar          */
+  --bg-card:      #1A1E28;   /* cards / widgets           */
+  --bg-card-alt:  #212636;   /* elevated / hover surface  */
+  --bg-input:     #1A1E28;
+  --bg-sidebar:   #13161D;
+  --bg-hover:     rgba(255, 255, 255, 0.05);
+  --bg-video:     #05070B;   /* video area (deep black)   */
 
-  --accent:       #2563eb;   /* professional blue */
-  --accent-dim:   rgba(37, 99, 235, 0.10);
-  --accent-dark:  #1d4ed8;
+  --accent:       #3B82F6;   /* info / PPE blue           */
+  --accent-dim:   rgba(59, 130, 246, 0.14);
+  --accent-dark:  #2563EB;
 
-  --green:        #16a34a;
-  --green-glow:   rgba(22, 163, 74, 0.30);
-  --red:          #dc2626;
-  --red-glow:     rgba(220, 38, 38, 0.30);
-  --orange:       #ea580c;
-  --yellow:       #d97706;
-  --emergency:    #dc2626;
+  --green:        #10B981;
+  --green-glow:   rgba(16, 185, 129, 0.35);
+  --red:          #EF4444;
+  --red-glow:     rgba(239, 68, 68, 0.35);
+  --orange:       #F97316;
+  --yellow:       #F59E0B;
+  --emergency:    #EF4444;
 
-  --text:         #0f172a;   /* slate-900 */
-  --text-sub:     #475569;   /* slate-600 */
-  --text-muted:   #94a3b8;   /* slate-400 */
+  --text:         #E8EAF0;   /* primary   */
+  --text-sub:     #9AA0B8;   /* secondary */
+  --text-muted:   #5C6480;   /* muted     */
 
-  --border:       #cdd6e3;   /* clearer separation on light bg */
-  --border-mid:   #b3c0d2;
-  --border-accent:rgba(37, 99, 235, 0.45);
+  --border:       #252A37;   /* subtle  */
+  --border-mid:   #353C52;   /* default */
+  --border-accent:rgba(59, 130, 246, 0.50);
 
-  --shadow-sm:    0 1px 2px rgba(15, 23, 42, 0.08);
-  --shadow:       0 1px 3px rgba(15, 23, 42, 0.10), 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md:    0 6px 18px rgba(15, 23, 42, 0.12);
+  --shadow-sm:    0 1px 2px rgba(0, 0, 0, 0.40);
+  --shadow:       0 2px 6px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-md:    0 8px 24px rgba(0, 0, 0, 0.55);
 
   --font:         'Sarabun', sans-serif;
   --r:            8px;
@@ -68,8 +68,8 @@ input, select, textarea { font-family: var(--font); }
 /* ─── Scrollbar ─────────────────────────────────── */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(15,23,42,0.18); border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(15,23,42,0.30); }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.16); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.28); }
 
 /* ══════════════════════════════════════════════════
    NAVIGATION BAR
@@ -449,7 +449,7 @@ input, select, textarea { font-family: var(--font); }
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.55);
+  background: rgba(0, 0, 0, 0.62);
   backdrop-filter: blur(3px);
   display: flex;
   align-items: center;
@@ -1036,7 +1036,7 @@ input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.2); }
 .splash-progress-track {
   width: 100%;
   height: 8px;
-  background: rgba(15,23,42,0.08);
+  background: rgba(255,255,255,0.08);
   border-radius: 99px;
   overflow: hidden;
 }
