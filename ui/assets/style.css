@@ -111,6 +111,7 @@ input, select, textarea { font-family: var(--font); }
   border-radius: 9px;
   box-shadow: var(--shadow-sm);
 }
+.brand-mark .ico { width: 19px; height: 19px; }
 .navbar-brand .brand-text {
   font-size: 15px;
   font-weight: 700;
@@ -240,7 +241,9 @@ body.with-sidebar #app {
   background: var(--accent-dim); color: var(--accent);
   border-left-color: var(--accent); font-weight: 600;
 }
-.sb-ico { width: 20px; text-align: center; font-size: 15px; flex-shrink: 0; }
+.sb-ico { width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.sb-ico .ico { width: 18px; height: 18px; opacity: .9; }
+.sb-item.active .sb-ico .ico { opacity: 1; }
 .sb-footer {
   padding: 12px 14px;
   border-top: 1px solid var(--border);

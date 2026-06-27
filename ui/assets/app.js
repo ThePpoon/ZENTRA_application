@@ -277,29 +277,44 @@ const ZENTRA = {
 };
 
 /* ─── Left Sidebar (persistent, lives in <body> so it survives #app swaps) ─── */
+// Clean inline SVG line icons (Lucide-style) — sharp + theme-aware (inherit
+// currentColor), far more professional than emoji which render inconsistently.
+ZENTRA.icons = {
+  dashboard: '<rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/>',
+  zone:      '<path d="M14.106 5.553a2 2 0 0 0 1.788 0l3.659-1.83A1 1 0 0 1 21 4.619v12.764a1 1 0 0 1-.553.894l-4.553 2.277a2 2 0 0 1-1.788 0l-4.212-2.106a2 2 0 0 0-1.788 0l-3.659 1.83A1 1 0 0 1 3 19.381V6.618a1 1 0 0 1 .553-.894l4.553-2.277a2 2 0 0 1 1.788 0z"/><path d="M15 5.764v15"/><path d="M9 3.236v15"/>',
+  history:   '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
+  settings:  '<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
+  shield:    '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+};
+ZENTRA.icon = function (name) {
+  return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+       + 'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+       + (ZENTRA.icons[name] || '') + '</svg>';
+};
+
 function renderSidebar(active) {
   const groups = [
     { label: 'หลัก', items: [
-      { id: 'dashboard',   ico: '📊', label: 'Dashboard'   },
-      { id: 'zone_editor', ico: '🗺️', label: 'Zone Editor' },
+      { id: 'dashboard',   ico: 'dashboard', label: 'Dashboard'   },
+      { id: 'zone_editor', ico: 'zone',      label: 'Zone Editor' },
     ]},
     { label: 'เหตุการณ์', items: [
-      { id: 'history', ico: '🕘', label: 'History' },
+      { id: 'history', ico: 'history', label: 'History' },
     ]},
     { label: 'ตั้งค่า', items: [
-      { id: 'settings', ico: '⚙️', label: 'Settings' },
+      { id: 'settings', ico: 'settings', label: 'Settings' },
     ]},
   ];
   const nav = groups.map(g => `
     <div class="sb-group-label">${g.label}</div>
     ${g.items.map(it => `
       <button class="sb-item${it.id === active ? ' active' : ''}" onclick="ZENTRA.navigate('${it.id}')">
-        <span class="sb-ico">${it.ico}</span><span>${it.label}</span>
+        <span class="sb-ico">${ZENTRA.icon(it.ico)}</span><span class="sb-label">${it.label}</span>
       </button>`).join('')}`).join('');
 
   return `
     <div class="sb-brand">
-      <span class="brand-mark">Z</span>
+      <span class="brand-mark">${ZENTRA.icon('shield')}</span>
       <div><span class="brand-text">ZENTRA</span><span class="brand-sub">Safety AI System</span></div>
     </div>
     <nav class="sb-nav">${nav}</nav>
