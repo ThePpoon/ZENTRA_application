@@ -39,12 +39,29 @@ ROBOFLOW_API_KEY     = os.getenv("ROBOFLOW_API_KEY",  "8xTIheqbzg4mkSLOdFe6")
 ROBOFLOW_WORKSPACE   = os.getenv("ROBOFLOW_WORKSPACE", "pholawats-workspace")
 INFERENCE_SERVER_URL = os.getenv("INFERENCE_SERVER_URL", "http://localhost:9001")
 
-PPE_MODEL_ID  = os.getenv("PPE_MODEL_ID",  "ppe-cpxsz/2")
+PPE_MODEL_ID  = os.getenv("PPE_MODEL_ID",  "")   # empty = no PPE model (cleared for restructure)
 FALL_MODEL_ID = os.getenv("FALL_MODEL_ID", "fall-detection-ovjqo/5")
 
 USE_LOCAL_MODEL  = os.getenv("USE_LOCAL_MODEL", "false").lower() == "true"
 PPE_LOCAL_MODEL  = str(MODELS_DIR / "ppe_finetuned.pt")
 FALL_LOCAL_MODEL = str(MODELS_DIR / "fall_finetuned.pt")
+
+# Sentinel used by the UI model selector to mean "use the locally fine-tuned
+# .pt (USE_LOCAL_MODEL path)" instead of a Roboflow model served by :9001.
+PPE_LOCAL_SENTINEL = "__local__"
+
+# Selectable PPE detection models shown in the Settings dropdown. Each "server"
+# entry is a Roboflow model_id pulled + run by the LOCAL inference server
+# (INFERENCE_SERVER_URL, :9001) — weights download once then inference runs on
+# the local GPU (images never leave the device per-frame). The "local" entry
+# uses the user's own fine-tuned ppe_finetuned.pt (fully offline, no Docker).
+#
+# Registry intentionally EMPTY — models were cleared for a clean restructure.
+# To add one back, append e.g.:
+#   {"id": "ppe-tqmos/1", "kind": "server", "label": "...", "note": "..."}
+#   {"id": PPE_LOCAL_SENTINEL, "kind": "local", "label": "โมเดลที่ฉันเทรนเอง (local .pt)", "note": "..."}
+# While empty, PPE detection is paused (the pipeline skips inference gracefully).
+PPE_MODELS: list[dict] = []
 
 ROBOFLOW_PPE_PROJECT  = os.getenv("ROBOFLOW_PPE_PROJECT",  "zentra-ppe")
 ROBOFLOW_FALL_PROJECT = os.getenv("ROBOFLOW_FALL_PROJECT", "zentra-fall")
@@ -120,6 +137,10 @@ PPE_CLASSES: dict[str, dict] = {
     "no glasses":      {"label": "No Glasses","label_th": "ไม่สวมแว่นตา",      "color": (0, 0, 220),   "violation": True},
     "no gloves":       {"label": "No Gloves", "label_th": "ไม่สวมถุงมือ",      "color": (0, 0, 220),   "violation": True},
     "no boots":        {"label": "No Boots",  "label_th": "ไม่สวมรองเท้าบูท", "color": (0, 0, 220),   "violation": True},
+    # ppe-tqmos/1 emits these extra class names — map them so violations/worn
+    # states register correctly (singular "no glove" + redundant "helmet on").
+    "no glove":        {"label": "No Gloves", "label_th": "ไม่สวมถุงมือ",      "color": (0, 0, 220),   "violation": True},
+    "helmet on":       {"label": "Helmet",    "label_th": "สวมหมวกนิรภัย",    "color": (0, 210, 0),   "violation": False},
     "person":          {"label": "Person",    "label_th": "บุคคล",              "color": (255, 190, 0), "violation": False},
 }
 # NOTE: PPE violation detection does NOT compute "person without helmet" — it
