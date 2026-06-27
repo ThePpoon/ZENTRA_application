@@ -226,7 +226,9 @@ class _InferenceWorker(threading.Thread):
                     r = self.local_ppe.predict(frame, conf=floor, imgsz=imgsz, verbose=False)
                     if r:
                         ppe_preds = [p for p in _yolo_to_roboflow(r[0]) if _ppe_conf_ok(p, cfg)]
-                elif self.client:
+                elif self.client and self.ppe_id:
+                    # ppe_id may be empty when the model registry is cleared →
+                    # skip inference (detection paused) instead of erroring per-frame.
                     r1 = self.client.infer(frame, model_id=self.ppe_id)
                     ppe_preds = [p for p in r1.get("predictions", []) if _ppe_conf_ok(p, cfg)]
                 # Hand the latest frame to the fall thread; read its latest result
@@ -442,6 +444,18 @@ class Pipeline:
                 cfg.FALL_CONFIRM_FRAMES = int(ai["fall_confirm_frames"])
             if "use_local_model" in ai:
                 cfg.USE_LOCAL_MODEL = bool(ai["use_local_model"])  # applies on next (re)connect
+            if "ppe_model_id" in ai:
+                # Model selector: "__local__" → use the fine-tuned .pt; otherwise
+                # a Roboflow model_id served locally by the :9001 inference server.
+                mid = str(ai["ppe_model_id"]).strip()
+                sentinel = getattr(cfg, "PPE_LOCAL_SENTINEL", "__local__")
+                if mid == sentinel:
+                    cfg.USE_LOCAL_MODEL = True
+                elif mid:
+                    cfg.USE_LOCAL_MODEL = False
+                    cfg.PPE_MODEL_ID = mid           # applies on next (re)connect
+                print(f"[Pipeline] PPE model set to '{mid}' "
+                      f"(local={cfg.USE_LOCAL_MODEL}) — reconnect camera to apply")
             if "fall_mode" in ai:
                 cfg.FALL_MODE = str(ai["fall_mode"]).lower()       # hybrid | yolo | pose (live)
             if "fall_yolo_confidence" in ai:
@@ -728,7 +742,8 @@ class Pipeline:
             # PPE source: locally fine-tuned model (toggle) vs Roboflow server
             local_ppe = self._load_local_ppe()
             with self._lock:
-                self.status["ppe_model"] = "local" if local_ppe is not None else "cloud"
+                self.status["ppe_model"] = ("local" if local_ppe is not None
+                                            else ("cloud" if ppe_id else "none"))
 
             reader     = _FrameReader(self._cap)
             reader.start()

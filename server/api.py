@@ -346,10 +346,11 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
         "group_emergency": "",
     },
     "ai": {
-        "ppe_confidence": 0.70,
+        "ppe_confidence": 0.40,         # tqmos (YOLOv8n) emits lower scores; 0.70 filtered everything out
         "fall_bbox_ratio": 0.72,
         "fall_confirm_frames": 6,
         "use_local_model": False,
+        "ppe_model_id": "ppe-tqmos/1",  # which PPE model the selector uses (see /api/ai/ppe-models)
         "fall_mode": "hybrid",          # hybrid | yolo | pose
     },
     "alerts": {
@@ -402,6 +403,17 @@ def _save_settings(data: dict) -> None:
 @app.get("/api/settings")
 async def get_settings():
     return JSONResponse(_load_settings())
+
+
+@app.get("/api/ai/ppe-models")
+async def get_ppe_models():
+    """List selectable PPE models for the Settings dropdown (from config)."""
+    try:
+        import config as cfg
+        return JSONResponse({"models": list(getattr(cfg, "PPE_MODELS", [])),
+                             "local_sentinel": getattr(cfg, "PPE_LOCAL_SENTINEL", "__local__")})
+    except Exception as e:
+        return JSONResponse({"models": [], "local_sentinel": "__local__", "error": str(e)})
 
 
 @app.post("/api/settings")
