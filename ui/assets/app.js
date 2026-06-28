@@ -31,7 +31,7 @@ const ZENTRA = {
       ZENTRA._currentScreen = screenId;
 
       // Left sidebar for main screens; full-screen for splash/source
-      const SHELL = ['dashboard', 'zone_editor', 'history', 'settings'];
+      const SHELL = ['dashboard', 'zone_editor', 'history', 'settings', 'cameras'];
       if (SHELL.includes(screenId)) ZENTRA.mountSidebar(screenId);
       else ZENTRA.hideSidebar();
 
@@ -136,6 +136,8 @@ const ZENTRA = {
         ZENTRA._updateKPIs();
         ZENTRA._renderAlarms();
         ZENTRA._updateModuleStatus();
+        // Dashboard toast hook (only fires when dashboard is loaded)
+        if (typeof ZENTRA._toastHook === 'function') ZENTRA._toastHook(msg);
       }
     }
   },
@@ -158,11 +160,19 @@ const ZENTRA = {
   },
 
   _updateAlertCounters() {
-    const a = ZENTRA.state.alerts;
-    const el = (id) => document.getElementById(id);
-    if (el('cnt-total'))    el('cnt-total').textContent    = a.total;
-    if (el('cnt-warning'))  el('cnt-warning').textContent  = a.warning;
-    if (el('cnt-emergency'))el('cnt-emergency').textContent= a.emergency;
+    var a = ZENTRA.state.alerts;
+    var el = function(id) { return document.getElementById(id); };
+    if (el('cnt-total'))     el('cnt-total').textContent     = a.total;
+    if (el('cnt-warning'))   el('cnt-warning').textContent   = a.warning;
+    if (el('cnt-emergency')) el('cnt-emergency').textContent = a.emergency;
+    // Topbar notification badge
+    var badge = el('topbar-badge');
+    if (badge) {
+      var total = a.total || 0;
+      badge.textContent = total > 99 ? '99+' : total;
+      if (total > 0) badge.classList.add('visible');
+      else badge.classList.remove('visible');
+    }
   },
 
   _fmtUptime(secs) {
@@ -194,32 +204,45 @@ const ZENTRA = {
     if (!list) return;
     const items = ZENTRA.state.recentAlarms || [];
     if (!items.length) {
-      list.innerHTML = '<div class="alarm-empty" id="alarm-empty">ยังไม่มีการแจ้งเตือน</div>';
+      list.innerHTML = '<div style="text-align:center;padding:24px 0;color:var(--text-muted);font-size:13px">ยังไม่มีการแจ้งเตือน</div>';
       return;
     }
-    list.innerHTML = items.map(it => `
-      <div class="alarm-item ${it.level || 'warning'}">
-        <div class="a-msg">${(it.message || '').replace(/</g,'&lt;')}</div>
-        <div class="a-meta">${it.time || ''}${it.camera ? ' · ' + it.camera : ''}</div>
-      </div>`).join('');
+    const colorMap = { emergency: 'var(--red)', alert: 'var(--orange)', warning: 'var(--yellow)', info: 'var(--accent)' };
+    const bgMap    = { emergency: 'var(--red-dim)', alert: 'rgba(255,122,69,.12)', warning: 'rgba(245,158,11,.12)', info: 'var(--accent-dim)' };
+    list.innerHTML = items.slice(0, 8).map(function(it) {
+      var lvl = it.level || 'alert';
+      var col = colorMap[lvl] || 'var(--accent)';
+      var bg  = bgMap[lvl]    || 'var(--accent-dim)';
+      return '<div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">'
+        + '<span style="width:8px;height:8px;border-radius:50%;background:' + col + ';flex-shrink:0;margin-top:5px"></span>'
+        + '<div style="flex:1;min-width:0">'
+        + '<div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + (it.message || '').replace(/</g,'&lt;') + '</div>'
+        + '<div style="font-size:11.5px;color:var(--text-muted);margin-top:1px">' + (it.time || '') + (it.camera ? ' · ' + it.camera : '') + '</div>'
+        + '</div>'
+        + '<span style="padding:2px 8px;border-radius:99px;background:' + bg + ';color:' + col + ';font-size:10.5px;font-weight:700;white-space:nowrap;flex-shrink:0">' + lvl.toUpperCase() + '</span>'
+        + '</div>';
+    }).join('');
   },
 
   _updateCameraState() {
     // Show a connecting/reconnecting overlay over the video feed.
     const overlay = document.getElementById('video-overlay');
-    if (!overlay) return;
-    const state = ZENTRA.state.camera;
-    if (state === 'connected') {
-      overlay.classList.add('hidden');
-    } else {
-      overlay.classList.remove('hidden');
-      const txt = overlay.querySelector('.video-overlay-text');
-      if (txt) {
-        txt.textContent = (state === 'reconnecting')
-          ? 'สัญญาณกล้องหลุด — กำลังเชื่อมต่อใหม่...'
-          : 'กำลังเชื่อมต่อกล้อง...';
+    if (overlay) {
+      const state = ZENTRA.state.camera;
+      if (state === 'connected') {
+        overlay.classList.add('hidden');
+      } else {
+        overlay.classList.remove('hidden');
+        const txt = overlay.querySelector('.video-overlay-text');
+        if (txt) {
+          txt.textContent = (state === 'reconnecting')
+            ? 'สัญญาณกล้องหลุด — กำลังเชื่อมต่อใหม่...'
+            : 'กำลังเชื่อมต่อกล้อง...';
+        }
       }
     }
+    // Camera status dot hook (cameras.html updates its own dot)
+    if (typeof ZENTRA._camDotHook === 'function') ZENTRA._camDotHook();
   },
 
   _showEmergencyBanner(msg) {
@@ -285,6 +308,7 @@ ZENTRA.icons = {
   history:   '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>',
   settings:  '<path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/>',
   shield:    '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/>',
+  cameras:   '<path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/>',
 };
 ZENTRA.icon = function (name) {
   return '<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
@@ -293,39 +317,66 @@ ZENTRA.icon = function (name) {
 };
 
 function renderSidebar(active) {
-  const groups = [
-    { label: 'หลัก', items: [
-      { id: 'dashboard',   ico: 'dashboard', label: 'Dashboard'   },
-      { id: 'zone_editor', ico: 'zone',      label: 'Zone Editor' },
-    ]},
-    { label: 'เหตุการณ์', items: [
-      { id: 'history', ico: 'history', label: 'History' },
-    ]},
-    { label: 'ตั้งค่า', items: [
-      { id: 'settings', ico: 'settings', label: 'Settings' },
-    ]},
+  var mainItems = [
+    { id: 'dashboard',   ico: 'dashboard', label: 'Dashboard'   },
+    { id: 'cameras',     ico: 'cameras',   label: 'Cameras'     },
+    { id: 'zone_editor', ico: 'zone',      label: 'Zone Editor' },
+    { id: 'history',     ico: 'history',   label: 'History'     },
   ];
-  const nav = groups.map(g => `
-    <div class="sb-group-label">${g.label}</div>
-    ${g.items.map(it => `
-      <button class="sb-item${it.id === active ? ' active' : ''}" onclick="ZENTRA.navigate('${it.id}')">
-        <span class="sb-ico">${ZENTRA.icon(it.ico)}</span><span class="sb-label">${it.label}</span>
-      </button>`).join('')}`).join('');
+  var nav = mainItems.map(function(it) {
+    return '<button class="sb-item' + (it.id === active ? ' active' : '') + '"'
+      + ' onclick="ZENTRA.navigate(\'' + it.id + '\')">'
+      + '<span class="sb-ico">' + ZENTRA.icon(it.ico) + '</span>'
+      + '<span class="sb-tooltip">' + it.label + '</span>'
+      + '</button>';
+  }).join('');
 
-  return `
-    <div class="sb-brand">
-      <span class="brand-mark">${ZENTRA.icon('shield')}</span>
-      <div><span class="brand-text">ZENTRA</span><span class="brand-sub">Safety AI System</span></div>
-    </div>
-    <nav class="sb-nav">${nav}</nav>
-    <div class="sb-footer">
-      <span class="nav-clock" id="nav-clock">--:--:--</span>
-      <span class="sys-pill ok" id="sys-pill"><span class="sys-dot"></span><span id="sys-pill-text">ระบบปกติ</span></span>
-    </div>`;
+  var setBtn = '<button class="sb-item' + (active === 'settings' ? ' active' : '') + '"'
+    + ' onclick="ZENTRA.navigate(\'settings\')" style="margin-top:auto">'
+    + '<span class="sb-ico">' + ZENTRA.icon('settings') + '</span>'
+    + '<span class="sb-tooltip">Settings</span>'
+    + '</button>';
+
+  return '<div class="sb-brand">' + ZENTRA.icon('shield') + '</div>'
+    + '<nav class="sb-nav">' + nav + setBtn + '</nav>'
+    + '<div class="sb-footer">'
+    + '<span class="nav-clock" id="nav-clock">--:--:--</span>'
+    + '<span class="sys-pill ok" id="sys-pill"><span class="sys-dot"></span><span id="sys-pill-text">ปกติ</span></span>'
+    + '</div>';
+}
+
+function renderTopbar() {
+  var isDark = (document.body.getAttribute('data-theme') || 'dark') === 'dark';
+  var themeIco = isDark
+    ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'
+    : '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>';
+  return '<div id="app-topbar">'
+    + '<div class="topbar-left">'
+    + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/>'
+    + '<circle cx="12" cy="10" r="3"/></svg>'
+    + '<span class="topbar-site">ZENTRA &middot; โรงงาน</span>'
+    + '</div>'
+    + '<div class="topbar-right">'
+    + '<button class="topbar-btn" id="topbar-theme-btn" onclick="ZENTRA.toggleTheme()" title="สลับธีม">'
+    + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + themeIco + '</svg>'
+    + '</button>'
+    + '<button class="topbar-btn topbar-bell" title="การแจ้งเตือน">'
+    + '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    + '<path d="M10.268 21a2 2 0 0 0 3.464 0"/>'
+    + '<path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg>'
+    + '<span class="topbar-badge" id="topbar-badge"></span>'
+    + '</button>'
+    + '<div class="topbar-user">'
+    + '<div class="topbar-avatar">OP</div>'
+    + '<div><div class="topbar-user-name">Operator</div><div class="topbar-user-sub">On-device</div></div>'
+    + '</div>'
+    + '</div>'
+    + '</div>';
 }
 
 ZENTRA.mountSidebar = function (active) {
-  let sb = document.getElementById('app-sidebar');
+  var sb = document.getElementById('app-sidebar');
   if (!sb) {
     sb = document.createElement('aside');
     sb.id = 'app-sidebar';
@@ -334,12 +385,39 @@ ZENTRA.mountSidebar = function (active) {
   sb.innerHTML = renderSidebar(active);
   sb.style.display = 'flex';
   document.body.classList.add('with-sidebar');
+
+  // Mount topbar once; update theme btn on re-navigation
+  if (!document.getElementById('app-topbar')) {
+    var div = document.createElement('div');
+    div.innerHTML = renderTopbar();
+    document.body.appendChild(div.firstElementChild);
+  } else {
+    ZENTRA._updateThemeBtn();
+  }
 };
 
 ZENTRA.hideSidebar = function () {
-  const sb = document.getElementById('app-sidebar');
+  var sb = document.getElementById('app-sidebar');
   if (sb) sb.style.display = 'none';
   document.body.classList.remove('with-sidebar');
+  var tb = document.getElementById('app-topbar');
+  if (tb) tb.remove();
+};
+
+ZENTRA.toggleTheme = function () {
+  var cur = document.body.getAttribute('data-theme') || 'dark';
+  document.body.setAttribute('data-theme', cur === 'dark' ? 'light' : 'dark');
+  ZENTRA._updateThemeBtn();
+};
+
+ZENTRA._updateThemeBtn = function () {
+  var btn = document.getElementById('topbar-theme-btn');
+  if (!btn) return;
+  var isDark = (document.body.getAttribute('data-theme') || 'dark') === 'dark';
+  var svg = btn.querySelector('svg');
+  if (svg) svg.innerHTML = isDark
+    ? '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'
+    : '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>';
 };
 
 /* ─── Header clock + system-status pill ───────────── */

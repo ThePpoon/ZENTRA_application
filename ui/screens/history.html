@@ -1,317 +1,264 @@
-<div class="app-layout">
-  <div id="navbar-mount"></div>
+<div style="height:100%;overflow-y:auto;background:var(--bg)">
+<div style="padding:24px 28px 28px;min-height:100%;display:flex;flex-direction:column;box-sizing:border-box">
 
-  <div class="history-layout">
-
-    <!-- Stat Cards -->
-    <div class="stat-cards" id="stat-cards">
-      <div class="stat-card">
-        <div class="stat-label">เหตุการณ์วันนี้</div>
-        <div><span class="stat-value" id="stat-total">—</span><span class="stat-unit">ครั้ง</span></div>
-      </div>
-      <div class="stat-card highlight-red">
-        <div class="stat-label">Emergency สะสม</div>
-        <div><span class="stat-value" id="stat-emergency">—</span><span class="stat-unit">ครั้ง</span></div>
-      </div>
-      <div class="stat-card">
-        <div class="stat-label">PPE violations</div>
-        <div><span class="stat-value" id="stat-ppe">—</span><span class="stat-unit">ครั้ง</span></div>
-      </div>
-      <div class="stat-card highlight-green">
-        <div class="stat-label">เวลาดำเนินงาน</div>
-        <div class="stat-value" id="stat-uptime" style="font-size:22px">—</div>
-        <div class="stat-sub">ระบบทำงานต่อเนื่อง</div>
-      </div>
+  <!-- ── Header ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-shrink:0">
+    <div>
+      <div style="font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.3px">Event History</div>
+      <div style="font-size:13px;color:var(--text-sub);margin-top:2px">All safety events logged on this device</div>
     </div>
-
-    <!-- Body -->
-    <div class="history-body">
-
-      <!-- Left: charts -->
-      <div class="history-left">
-        <div class="chart-container">
-          <div class="chart-title">Alert รายชั่วโมง (วันนี้)</div>
-          <canvas id="hourly-chart" style="width:100%;max-height:160px;"></canvas>
-        </div>
-
-        <div class="category-bars" id="cat-bars">
-          <div class="cat-bar-row">
-            <span class="cat-bar-label">PPE</span>
-            <div class="cat-bar-track"><div class="cat-bar-fill ppe" id="bar-ppe" style="width:0%"></div></div>
-            <span class="cat-bar-count" id="cnt-ppe">—</span>
-          </div>
-          <div class="cat-bar-row">
-            <span class="cat-bar-label">Fall</span>
-            <div class="cat-bar-track"><div class="cat-bar-fill fall" id="bar-fall" style="width:0%"></div></div>
-            <span class="cat-bar-count" id="cnt-fall">—</span>
-          </div>
-          <div class="cat-bar-row">
-            <span class="cat-bar-label">Zone</span>
-            <div class="cat-bar-track"><div class="cat-bar-fill zone" id="bar-zone" style="width:0%"></div></div>
-            <span class="cat-bar-count" id="cnt-zone">—</span>
-          </div>
-        </div>
-      </div>
-
-      <!-- Right: events list -->
-      <div class="history-right">
-        <div class="event-list-header" style="display:flex;align-items:center;gap:6px">
-          <span>บันทึกเหตุการณ์</span>
-          <span id="hist-date" style="margin-left:auto;font-weight:600;color:var(--text-sub);font-size:11px;text-transform:none;letter-spacing:0">วันนี้</span>
-          <button class="btn btn-ghost btn-sm" style="padding:2px 8px" title="วันก่อนหน้า" onclick="shiftDay(1)">◀</button>
-          <button class="btn btn-ghost btn-sm" style="padding:2px 8px" title="วันถัดไป" onclick="shiftDay(-1)">▶</button>
-        </div>
-        <div class="event-list" id="event-list"></div>
-        <div class="event-list-footer" style="flex-wrap:wrap">
-          <button class="btn btn-ghost btn-sm" onclick="loadMoreEvents()" id="load-more-btn">โหลดเพิ่ม</button>
-          <button class="btn btn-ghost btn-sm" onclick="exportCSV()" style="margin-left:auto">CSV</button>
-          <button class="btn btn-outline btn-sm" onclick="downloadReport()">รายงาน PDF</button>
-          <button class="btn btn-primary btn-sm" onclick="sendLineReport(this)">ส่งสรุป LINE</button>
-        </div>
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Evidence modal -->
-  <div class="modal-overlay hidden" id="evidence-modal" onclick="if(event.target===this)closeEvidence()">
-    <div class="modal-box">
-      <div class="modal-head">
-        <span class="event-badge ppe" id="ev-badge">PPE</span>
-        <span class="modal-title" id="ev-msg">—</span>
-        <button class="modal-close" onclick="closeEvidence()">✕</button>
-      </div>
-      <div class="modal-meta" id="ev-meta"></div>
-      <div class="modal-img-wrap">
-        <img id="ev-img" alt="ภาพหลักฐาน">
-        <div id="ev-nosnap" class="alarm-empty" style="display:none">ไม่มีภาพหลักฐานสำหรับเหตุการณ์นี้</div>
-      </div>
+    <div style="display:flex;gap:8px">
+      <button onclick="histExport()" style="display:flex;align-items:center;gap:7px;height:36px;padding:0 14px;border-radius:8px;border:1px solid var(--border);background:var(--bg-card);color:var(--text);font-family:var(--font);font-size:13px;font-weight:500;cursor:pointer">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Export CSV
+      </button>
+      <button onclick="histRefresh()" style="display:flex;align-items:center;gap:7px;height:36px;padding:0 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+        Refresh
+      </button>
     </div>
   </div>
+
+  <!-- ── Stat Summary ── -->
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px;flex-shrink:0">
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:16px 18px">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Total Events</div>
+      <div style="font-size:28px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums" id="hist-stat-total">—</div>
+    </div>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:16px 18px">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Emergency</div>
+      <div style="font-size:28px;font-weight:800;color:var(--red);font-variant-numeric:tabular-nums" id="hist-stat-emg">—</div>
+    </div>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:16px 18px">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">Warnings</div>
+      <div style="font-size:28px;font-weight:800;color:var(--yellow);font-variant-numeric:tabular-nums" id="hist-stat-warn">—</div>
+    </div>
+    <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:16px 18px">
+      <div style="font-size:12px;color:var(--text-muted);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.4px">PPE Alerts</div>
+      <div style="font-size:28px;font-weight:800;color:var(--orange);font-variant-numeric:tabular-nums" id="hist-stat-ppe">—</div>
+    </div>
+  </div>
+
+  <!-- ── Filter Bar ── -->
+  <div style="display:flex;align-items:center;gap:9px;margin-bottom:14px;flex-shrink:0">
+    <div style="flex:1;display:flex;align-items:center;gap:8px;border:1px solid var(--border);border-radius:9px;padding:8px 12px;background:var(--bg-card)">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+      <input id="hist-search" type="text" placeholder="Search events…" oninput="histFilter()"
+        style="border:none;background:transparent;color:var(--text);font-family:var(--font);font-size:13.5px;width:100%;outline:none">
+    </div>
+    <select id="hist-filter-level" onchange="histFilter()" style="border:1px solid var(--border);border-radius:9px;padding:9px 12px;background:var(--bg-card);color:var(--text);font-family:var(--font);font-size:13px;cursor:pointer;outline:none">
+      <option value="all">All Levels</option>
+      <option value="emergency">Emergency</option>
+      <option value="alert">Alert</option>
+      <option value="info">Info</option>
+    </select>
+    <select id="hist-filter-type" onchange="histFilter()" style="border:1px solid var(--border);border-radius:9px;padding:9px 12px;background:var(--bg-card);color:var(--text);font-family:var(--font);font-size:13px;cursor:pointer;outline:none">
+      <option value="all">All Types</option>
+      <option value="ppe">PPE</option>
+      <option value="zone">Zone</option>
+      <option value="fall">Fall</option>
+      <option value="heat">Heat Stroke</option>
+    </select>
+  </div>
+
+  <!-- ── Event Table ── -->
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);overflow:hidden;flex:1">
+
+    <!-- Column headers -->
+    <div style="display:grid;grid-template-columns:44px 1fr 80px 90px 90px 120px 80px;gap:10px;padding:11px 20px;background:var(--bg-card-alt);border-bottom:1px solid var(--border)">
+      <span></span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Event</span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Camera</span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Type</span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Level</span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Time</span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Conf</span>
+    </div>
+
+    <!-- Rows injected here -->
+    <div id="hist-table-body">
+      <div style="text-align:center;padding:48px 0;color:var(--text-muted)">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom:12px;opacity:.4"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/></svg>
+        <div style="font-size:14px;color:var(--text-muted)">กำลังโหลดข้อมูล…</div>
+      </div>
+    </div>
+
+    <!-- Pagination bar -->
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 20px;border-top:1px solid var(--border)">
+      <span style="font-size:12.5px;color:var(--text-muted)" id="hist-pager-label">—</span>
+      <div style="display:flex;gap:6px" id="hist-pager-btns"></div>
+    </div>
+  </div>
+
+  <!-- ── Footer ── -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding-top:18px;margin-top:24px;border-top:1px solid var(--border);flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div style="width:24px;height:24px;border-radius:7px;background:linear-gradient(135deg,#6D3BFF,var(--accent));display:flex;align-items:center;justify-content:center">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+      </div>
+      <span style="font-size:12.5px;color:var(--text-muted)">ZENTRA · On-device factory safety AI</span>
+    </div>
+    <span style="font-size:12px;color:var(--text-muted)">© 2026 ZENTRA · PDPA compliant</span>
+  </div>
+
+</div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <script>
-var _eventsOffset = 0;
-var _chart = null;
-var _dayOffset = 0;   // 0 = today, N = N days ago
+var _histEvents = [];
+var _histPage   = 1;
+var _histPer    = 15;
 
-function currentDayStr() {
-  if (_dayOffset <= 0) return null;          // today
-  const d = new Date(); d.setDate(d.getDate() - _dayOffset);
-  return d.toISOString().slice(0, 10);
+var _histTypeCfg = {
+  ppe:  { label:'PPE',  color:'var(--orange)', bg:'rgba(255,122,69,.12)', initials:'PP' },
+  zone: { label:'Zone', color:'var(--accent)', bg:'var(--accent-dim)',    initials:'ZN' },
+  fall: { label:'Fall', color:'var(--red)',    bg:'var(--red-dim)',       initials:'FL' },
+  heat: { label:'Heat', color:'#F59E0B',       bg:'rgba(245,158,11,.12)', initials:'HT' },
+  emergency: { label:'Emrg', color:'var(--red)', bg:'var(--red-dim)',     initials:'EM' },
+};
+var _histLevelCfg = {
+  emergency: { label:'Emergency', color:'var(--red)',    bg:'var(--red-dim)' },
+  alert:     { label:'Alert',     color:'var(--orange)', bg:'rgba(255,122,69,.12)' },
+  info:      { label:'Info',      color:'var(--accent)', bg:'var(--accent-dim)' },
+};
+
+function histTypeKey(e) {
+  var m = (e.message || '').toLowerCase();
+  if (m.includes('ppe') || m.includes('helmet') || m.includes('vest') || m.includes('glove') || m.includes('หมวก') || m.includes('เสื้อ')) return 'ppe';
+  if (m.includes('fall') || m.includes('ล้ม')) return 'fall';
+  if (m.includes('heat') || m.includes('ความร้อน')) return 'heat';
+  if ((e.level || '') === 'emergency') return 'emergency';
+  return 'zone';
 }
-function _dayParam(sep) {
-  const d = currentDayStr();
-  return d ? `${sep}day=${d}` : '';
+
+function histFilteredEvents() {
+  var q    = ((document.getElementById('hist-search')       || {}).value || '').toLowerCase();
+  var lvl  = (document.getElementById('hist-filter-level')  || {}).value || 'all';
+  var type = (document.getElementById('hist-filter-type')   || {}).value || 'all';
+  return _histEvents.filter(function(e) {
+    if (q && (e.message || '').toLowerCase().indexOf(q) === -1) return false;
+    if (lvl  !== 'all' && (e.level || 'info') !== lvl)  return false;
+    if (type !== 'all' && histTypeKey(e) !== type)       return false;
+    return true;
+  });
 }
-function shiftDay(delta) {
-  _dayOffset = Math.max(0, _dayOffset + delta);   // can't go into the future
-  const lbl = document.getElementById('hist-date');
-  if (lbl) lbl.textContent = _dayOffset === 0 ? 'วันนี้' : `${currentDayStr()} (${_dayOffset} วันก่อน)`;
-  _eventsOffset = 0;
-  loadTodayStats(); loadHourlyChart(); loadEvents();
+
+function histFilter() { _histPage = 1; histRenderTable(); }
+
+function histRenderTable() {
+  var filtered = histFilteredEvents();
+  var total = filtered.length;
+  var pages = Math.max(1, Math.ceil(total / _histPer));
+  _histPage = Math.min(_histPage, pages);
+  var slice = filtered.slice((_histPage - 1) * _histPer, _histPage * _histPer);
+
+  var lbl = document.getElementById('hist-pager-label');
+  if (lbl) {
+    var from = total === 0 ? 0 : (_histPage - 1) * _histPer + 1;
+    var to   = Math.min(_histPage * _histPer, total);
+    lbl.textContent = 'Showing ' + from + '–' + to + ' of ' + total + ' events';
+  }
+
+  var btns = document.getElementById('hist-pager-btns');
+  if (btns) {
+    var bhtml = '<button onclick="histGoPage(' + Math.max(1, _histPage - 1) + ')"'
+      + (_histPage <= 1 ? ' disabled' : '')
+      + ' style="width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;opacity:' + (_histPage <= 1 ? '.4' : '1') + '">‹</button>';
+    var s = Math.max(1, Math.min(_histPage - 2, pages - 4));
+    var end2 = Math.min(pages, s + 4);
+    for (var p2 = s; p2 <= end2; p2++) {
+      bhtml += '<button onclick="histGoPage(' + p2 + ')" style="width:30px;height:30px;border-radius:7px;'
+        + (p2 === _histPage ? 'border:none;background:var(--accent);color:#fff;font-weight:700;' : 'border:1px solid var(--border);background:transparent;color:var(--text-muted);')
+        + 'cursor:pointer">' + p2 + '</button>';
+    }
+    bhtml += '<button onclick="histGoPage(' + Math.min(pages, _histPage + 1) + ')"'
+      + (_histPage >= pages ? ' disabled' : '')
+      + ' style="width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;opacity:' + (_histPage >= pages ? '.4' : '1') + '">›</button>';
+    btns.innerHTML = bhtml;
+  }
+
+  var body = document.getElementById('hist-table-body');
+  if (!body) return;
+  if (slice.length === 0) {
+    body.innerHTML = '<div style="text-align:center;padding:48px;color:var(--text-muted);font-size:13.5px">ไม่พบเหตุการณ์ที่ตรงกับเงื่อนไข</div>';
+    return;
+  }
+  body.innerHTML = slice.map(function(e) {
+    var tk  = histTypeKey(e);
+    var tc  = _histTypeCfg[tk] || { label: tk, color: 'var(--accent)', bg: 'var(--accent-dim)', initials: '??' };
+    var lk  = (e.level || 'info');
+    var lc  = _histLevelCfg[lk] || _histLevelCfg.info;
+    var cf  = e.confidence ? Math.round(e.confidence * 100) + '%' : '—';
+    var tm  = e.time || e.timestamp || '—';
+    return '<div style="display:grid;grid-template-columns:44px 1fr 80px 90px 90px 120px 80px;gap:10px;padding:13px 20px;align-items:center;border-bottom:1px solid var(--border)">'
+      + '<div style="width:34px;height:34px;border-radius:50%;background:' + tc.bg + ';color:' + tc.color + ';display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;flex-shrink:0">' + tc.initials + '</div>'
+      + '<div><div style="font-size:13.5px;font-weight:600;color:var(--text)">' + (e.message || 'Safety event') + '</div>'
+      + '<div style="font-size:11.5px;color:var(--text-muted);margin-top:1px">' + (e.detail || 'Detected by ZENTRA AI') + '</div></div>'
+      + '<span style="font-size:12.5px;color:var(--text-sub)">' + (e.camera || 'Cam #1') + '</span>'
+      + '<span style="display:inline-flex;padding:3px 9px;border-radius:99px;background:' + tc.bg + ';color:' + tc.color + ';font-size:11px;font-weight:700">' + tc.label + '</span>'
+      + '<span style="display:inline-flex;padding:3px 9px;border-radius:99px;background:' + lc.bg + ';color:' + lc.color + ';font-size:11px;font-weight:700">' + lc.label + '</span>'
+      + '<span style="font-size:12.5px;color:var(--text-sub);font-variant-numeric:tabular-nums">' + tm + '</span>'
+      + '<span style="font-size:12.5px;font-weight:700;color:var(--text-sub);font-variant-numeric:tabular-nums">' + cf + '</span>'
+      + '</div>';
+  }).join('');
+}
+
+function histGoPage(p) { _histPage = p; histRenderTable(); }
+
+function histRefresh() {
+  var body = document.getElementById('hist-table-body');
+  if (body) body.innerHTML = '<div style="text-align:center;padding:48px 0;color:var(--text-muted)">กำลังโหลด…</div>';
+  fetch('/api/history/events?limit=500').then(function(r) { return r.json(); }).then(function(d) {
+    _histEvents = (d.events || []).slice().reverse();
+    histUpdateStats();
+    histRenderTable();
+  }).catch(function() {
+    if (body) body.innerHTML = '<div style="text-align:center;padding:48px 0;color:var(--red)">ไม่สามารถโหลดข้อมูลได้</div>';
+  });
+}
+
+function histUpdateStats() {
+  var total = _histEvents.length;
+  var emg   = _histEvents.filter(function(e) { return e.level === 'emergency'; }).length;
+  var warn  = _histEvents.filter(function(e) { return e.level === 'alert'; }).length;
+  var ppe   = _histEvents.filter(function(e) { return histTypeKey(e) === 'ppe'; }).length;
+  function setEl(id, v) { var x = document.getElementById(id); if (x) x.textContent = v; }
+  setEl('hist-stat-total', total);
+  setEl('hist-stat-emg',   emg);
+  setEl('hist-stat-warn',  warn);
+  setEl('hist-stat-ppe',   ppe);
+  ZENTRA.state.alerts = { total: total, emergency: emg, warning: warn };
+  ZENTRA._updateKPIs();
+}
+
+function histExport() {
+  var filtered = histFilteredEvents();
+  var rows = ['Time,Level,Type,Camera,Message,Confidence'];
+  filtered.forEach(function(e) {
+    rows.push([
+      (e.time || e.timestamp || ''),
+      (e.level || ''),
+      histTypeKey(e),
+      (e.camera || ''),
+      '"' + (e.message || '').replace(/"/g, '""') + '"',
+      (e.confidence || ''),
+    ].join(','));
+  });
+  var blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  var url  = URL.createObjectURL(blob);
+  var a    = document.createElement('a');
+  a.href = url; a.download = 'zentra_events.csv'; a.click();
+  URL.revokeObjectURL(url);
 }
 
 function init_history() {
-  loadTodayStats();
-  loadHourlyChart();
-  loadEvents();
-}
-
-async function loadTodayStats() {
-  try {
-    const res  = await fetch('/api/history/today' + _dayParam('?'));
-    const data = await res.json();
-    document.getElementById('stat-total').textContent    = data.total;
-    document.getElementById('stat-emergency').textContent= data.emergency;
-    document.getElementById('stat-ppe').textContent      = data.ppe_violations;
-    document.getElementById('stat-uptime').textContent   = fmtUptime(data.uptime_seconds);
-
-    const total = data.total || 1;
-    setBar('ppe',  data.ppe_violations, total);
-    setBar('fall', data.falls,          total);
-    setBar('zone', data.zone_intrusions,total);
-  } catch (_) {}
-}
-
-function setBar(type, count, total) {
-  const pct = Math.round(count / total * 100);
-  document.getElementById(`bar-${type}`).style.width = pct + '%';
-  document.getElementById(`cnt-${type}`).textContent = `${count} ครั้ง (${pct}%)`;
-}
-
-function fmtUptime(secs) {
-  const h = Math.floor(secs / 3600);
-  const m = Math.floor((secs % 3600) / 60);
-  return `${h}h ${String(m).padStart(2,'0')}m`;
-}
-
-async function loadHourlyChart() {
-  const canvas = document.getElementById('hourly-chart');
-  if (!canvas) return;
-  if (typeof Chart === 'undefined') {
-    // Chart.js (CDN) failed to load — show a readable fallback
-    canvas.insertAdjacentHTML('afterend',
-      '<div class="text-muted" style="text-align:center;padding:12px;font-size:12px">โหลดกราฟไม่สำเร็จ (ตรวจการเชื่อมต่ออินเทอร์เน็ต)</div>');
-    return;
+  _histPage = 1;
+  _histEvents = [];
+  if (ZENTRA.state.recentAlarms && ZENTRA.state.recentAlarms.length) {
+    _histEvents = ZENTRA.state.recentAlarms;
+    histUpdateStats();
+    histRenderTable();
   }
-  try {
-    const res  = await fetch('/api/history/hourly' + _dayParam('?'));
-    const data = await res.json();
-    // Build labels explicitly 00..23 — do NOT use Object.keys(data) order:
-    // JS reorders integer-like string keys ("10".."23") ahead of "00".."09",
-    // which shifted the window and hid the current hour.
-    const labels = Array.from({ length: 24 }, (_, h) => String(h).padStart(2, '0'));
-    const values = labels.map(h => data[h] || 0);
-
-    // Dark-theme axis/grid colors
-    const TICK = '#9AA0B8', GRID = 'rgba(255,255,255,0.07)';
-    const ctx = canvas.getContext('2d');
-    if (_chart) _chart.destroy();
-    _chart = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels,
-        datasets: [{
-          data: values,
-          backgroundColor: 'rgba(59, 130, 246, 0.75)',
-          borderColor: '#3B82F6',
-          borderWidth: 1,
-          borderRadius: 4,
-          maxBarThickness: 26,
-        }],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: { legend: { display: false } },
-        scales: {
-          x: {
-            ticks: { color: TICK, font: { size: 10, family: 'Sarabun' } },
-            grid:  { color: GRID, display: false },
-          },
-          y: {
-            beginAtZero: true,
-            ticks: { color: TICK, font: { size: 10, family: 'Sarabun' }, stepSize: 1, precision: 0 },
-            grid:  { color: GRID },
-          },
-        },
-      },
-    });
-  } catch (_) {}
-}
-
-async function loadEvents(append = false) {
-  try {
-    const res  = await fetch(`/api/history/events?limit=20&offset=${_eventsOffset}` + _dayParam('&'));
-    const data = await res.json();
-    const list = document.getElementById('event-list');
-
-    if (!append) list.innerHTML = '';
-    if (!append && !data.events.length) {
-      list.innerHTML = '<div class="alarm-empty">ไม่มีเหตุการณ์ในวันนี้</div>';
-    }
-
-    for (const e of data.events) {
-      const div = document.createElement('div');
-      div.className = 'event-item';
-      div.onclick = () => openEvidence(e);
-      div.innerHTML = `
-        <div class="event-type-row">
-          <span class="event-badge ${e.type}">${e.type.toUpperCase()}</span>
-          <span class="event-desc">${(e.message||'').replace(/</g,'&lt;')}</span>
-          ${e.has_snapshot ? '<span title="มีภาพหลักฐาน" style="margin-left:auto">📷</span>' : ''}
-        </div>
-        <div class="event-meta">
-          ${e.time} · ${e.camera}
-          ${e.line_sent ? ' · <span style="color:var(--green);font-size:10px">LINE ส่งแล้ว</span>' : ''}
-        </div>`;
-      list.appendChild(div);
-    }
-
-    _eventsOffset += data.events.length;
-    document.getElementById('load-more-btn').style.display =
-      data.has_more ? 'inline-flex' : 'none';
-  } catch (_) {}
-}
-
-function openEvidence(e) {
-  const ov = document.getElementById('evidence-modal');
-  if (!ov) return;
-  document.getElementById('ev-badge').className = 'event-badge ' + e.type;
-  document.getElementById('ev-badge').textContent = (e.type || '').toUpperCase();
-  document.getElementById('ev-msg').textContent  = e.message || '';
-  document.getElementById('ev-meta').textContent = `${e.date || ''} ${e.time || ''} · ${e.camera || ''}`;
-  const img = document.getElementById('ev-img');
-  const non = document.getElementById('ev-nosnap');
-  if (e.has_snapshot) {
-    img.src = '/api/history/snapshot/' + e.id + '?t=' + Date.now();
-    img.style.display = 'block'; non.style.display = 'none';
-  } else {
-    img.style.display = 'none'; non.style.display = 'block';
-  }
-  ov.classList.remove('hidden');
-}
-function closeEvidence() {
-  const ov = document.getElementById('evidence-modal');
-  if (ov) ov.classList.add('hidden');
-}
-
-async function downloadReport() {
-  const fname = 'zentra_report' + (currentDayStr() ? '_' + currentDayStr() : '') + '.pdf';
-  try {
-    const res = await fetch('/api/report/daily.pdf' + _dayParam('?'));
-    if (!res.ok) { alert('สร้างรายงานไม่สำเร็จ'); return; }
-    const buf = await res.arrayBuffer();
-
-    // Preferred: native Save dialog via pywebview (WebView2 blocks blob downloads)
-    try {
-      const bytes = new Uint8Array(buf);
-      let bin = '';
-      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-      const b64 = btoa(bin);
-      const saved = await window.pywebview.api.save_binary(b64, fname);
-      if (saved) alert('บันทึกรายงานแล้ว:\n' + saved);
-      return;
-    } catch (_) {
-      // Fallback for plain browser
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(new Blob([buf], { type: 'application/pdf' }));
-      a.download = fname; a.click(); URL.revokeObjectURL(a.href);
-    }
-  } catch (_) { alert('สร้างรายงานไม่สำเร็จ'); }
-}
-
-async function sendLineReport(btn) {
-  if (btn) { btn.disabled = true; btn.textContent = 'กำลังส่ง...'; }
-  let d;
-  try {
-    d = await (await fetch('/api/report/send-line', {
-      method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({ day: currentDayStr() }),
-    })).json();
-  } catch (_) { d = { ok: false }; }
-  if (btn) { btn.disabled = false; btn.textContent = 'ส่งสรุป LINE'; }
-  alert(d.ok ? 'ส่งสรุปเข้า LINE แล้ว' : ('ส่งไม่สำเร็จ: ' + (d.error || 'ตรวจ LINE token ใน Settings')));
-}
-
-function loadMoreEvents() { loadEvents(true); }
-
-async function exportCSV() {
-  try {
-    const res = await fetch('/api/history/export.csv' + _dayParam('?'));
-    const csv = await res.text();
-    try {
-      await window.pywebview.api.save_file(csv, 'zentra_history.csv');
-    } catch (_) {
-      // Fallback: browser download
-      const blob = new Blob([csv], { type: 'text/csv' });
-      const a    = document.createElement('a');
-      a.href     = URL.createObjectURL(blob);
-      a.download = 'zentra_history.csv';
-      a.click();
-    }
-  } catch (_) {}
+  histRefresh();
 }
 </script>
