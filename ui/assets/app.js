@@ -322,6 +322,7 @@ function renderSidebar(active) {
     { id: 'cameras',     ico: 'cameras',   label: 'Cameras'     },
     { id: 'zone_editor', ico: 'zone',      label: 'Zone Editor' },
     { id: 'history',     ico: 'history',   label: 'History'     },
+    { id: 'settings',    ico: 'settings',  label: 'Settings'    },
   ];
   var nav = mainItems.map(function(it) {
     return '<button class="sb-item' + (it.id === active ? ' active' : '') + '"'
@@ -331,14 +332,8 @@ function renderSidebar(active) {
       + '</button>';
   }).join('');
 
-  var setBtn = '<button class="sb-item' + (active === 'settings' ? ' active' : '') + '"'
-    + ' onclick="ZENTRA.navigate(\'settings\')" style="margin-top:auto">'
-    + '<span class="sb-ico">' + ZENTRA.icon('settings') + '</span>'
-    + '<span class="sb-tooltip">Settings</span>'
-    + '</button>';
-
   return '<div class="sb-brand">' + ZENTRA.icon('shield') + '</div>'
-    + '<nav class="sb-nav">' + nav + setBtn + '</nav>'
+    + '<nav class="sb-nav">' + nav + '</nav>'
     + '<div class="sb-footer">'
     + '<span class="nav-clock" id="nav-clock">--:--:--</span>'
     + '<span class="sys-pill ok" id="sys-pill"><span class="sys-dot"></span><span id="sys-pill-text">ปกติ</span></span>'

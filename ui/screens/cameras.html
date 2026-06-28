@@ -1,10 +1,11 @@
+<!-- cameras.html — Camera management with role assignment + fullscreen view -->
 <div style="height:100%;overflow-y:auto;background:var(--bg)">
 <div style="padding:24px 28px 28px;min-height:100%;display:flex;flex-direction:column;box-sizing:border-box">
 
   <!-- ── Header ── -->
   <div style="margin-bottom:18px;flex-shrink:0">
     <div style="font-size:22px;font-weight:800;color:var(--text);letter-spacing:-.3px">Cameras</div>
-    <div style="font-size:13px;color:var(--text-sub);margin-top:2px">Connected video sources on this device</div>
+    <div style="font-size:13px;color:var(--text-sub);margin-top:2px">Connected video sources — click a row to view fullscreen or assign detection roles</div>
   </div>
 
   <!-- ── Summary Cards ── -->
@@ -45,15 +46,15 @@
       <div style="font-size:30px;font-weight:800;color:var(--text);margin-top:10px;font-variant-numeric:tabular-nums" id="cam-count-offline">0</div>
     </div>
 
-    <!-- Storage -->
+    <!-- Active Roles -->
     <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:18px 20px;display:flex;flex-direction:column;justify-content:space-between">
       <div style="display:flex;align-items:center;justify-content:space-between">
-        <span style="font-size:13px;color:var(--text-sub)">Storage Used</span>
+        <span style="font-size:13px;color:var(--text-sub)">Active Roles</span>
         <span style="width:26px;height:26px;border-radius:50%;background:var(--accent-dim);color:var(--accent);display:flex;align-items:center;justify-content:center">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v14a9 3 0 0 0 18 0V5"/><path d="M3 12a9 3 0 0 0 18 0"/></svg>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 12H3v9h8z"/><path d="M21 3h-8v18h8z"/><path d="M21 3h-8v6h8z"/></svg>
         </span>
       </div>
-      <div style="font-size:30px;font-weight:800;color:var(--text);margin-top:10px;font-variant-numeric:tabular-nums"><span id="cam-storage">—</span><span style="font-size:16px;color:var(--text-muted)" id="cam-storage-unit">GB</span></div>
+      <div style="font-size:30px;font-weight:800;color:var(--text);margin-top:10px;font-variant-numeric:tabular-nums" id="cam-active-roles">0</div>
     </div>
   </div>
 
@@ -63,57 +64,24 @@
     <!-- Table header bar -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--border)">
       <span style="font-size:15px;font-weight:700;color:var(--text)">All Cameras</span>
-      <div style="display:flex;align-items:center;gap:7px;border:1px solid var(--border);border-radius:8px;padding:7px 11px;color:var(--text-muted)">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
-        <span style="font-size:13px">Search…</span>
-      </div>
     </div>
 
     <!-- Column headers -->
-    <div style="display:grid;grid-template-columns:1.6fr 80px 1.2fr 1fr .9fr 1.4fr 1fr;gap:12px;padding:11px 20px;background:var(--bg-card-alt);border-bottom:1px solid var(--border)">
-      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Name</span>
+    <div style="display:grid;grid-template-columns:64px 1fr 1fr 1.8fr 80px 80px;gap:12px;padding:11px 20px;background:var(--bg-card-alt);border-bottom:1px solid var(--border)">
       <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Feed</span>
-      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Location</span>
-      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Added</span>
-      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Rules</span>
-      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Compliance</span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Name</span>
       <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Status</span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase">Roles</span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase;text-align:center">View</span>
+      <span style="font-size:11px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase;text-align:center">Roles</span>
     </div>
 
-    <!-- Camera row -->
-    <div id="cam-table-body">
-      <div style="display:grid;grid-template-columns:1.6fr 80px 1.2fr 1fr .9fr 1.4fr 1fr;gap:12px;padding:14px 20px;align-items:center;border-bottom:1px solid var(--border)">
-        <div>
-          <div style="font-size:13.5px;font-weight:600;color:var(--text)" id="cam-row-name">Camera #1</div>
-          <div style="font-size:11px;color:var(--text-muted);font-family:ui-monospace,monospace;margin-top:2px" id="cam-row-src">—</div>
-        </div>
-        <div style="width:64px;height:40px;border-radius:6px;background:var(--bg-video);display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);overflow:hidden">
-          <img id="cam-thumb" src="" style="width:100%;height:100%;object-fit:cover;display:none" alt="">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="cam-thumb-ico"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
-        </div>
-        <span style="font-size:13px;color:var(--text-sub)">Line A · Assembly</span>
-        <span style="font-size:13px;color:var(--text-sub);font-variant-numeric:tabular-nums" id="cam-row-date">—</span>
-        <span style="font-size:13px;color:var(--text);font-weight:600">3</span>
-        <div style="display:flex;align-items:center;gap:9px">
-          <div style="flex:1;height:7px;border-radius:99px;background:var(--bg-card-alt);overflow:hidden">
-            <div id="cam-compliance-bar" style="width:82%;height:100%;background:var(--green);border-radius:99px;transition:width .4s"></div>
-          </div>
-          <span style="font-size:12px;font-weight:600;color:var(--text-sub);font-variant-numeric:tabular-nums" id="cam-compliance-pct">82%</span>
-        </div>
-        <span id="cam-status-badge" style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:99px;background:var(--green-dim);color:var(--green);font-size:11.5px;font-weight:700">
-          <span style="width:6px;height:6px;border-radius:50%;background:var(--green)"></span>Online
-        </span>
-      </div>
-    </div>
+    <!-- Camera rows -->
+    <div id="cam-table-body"></div>
 
     <!-- Pagination bar -->
     <div style="display:flex;align-items:center;justify-content:space-between;padding:13px 20px;border-top:1px solid var(--border)">
-      <span style="font-size:12.5px;color:var(--text-muted)">Showing 1 of 1 camera</span>
-      <div style="display:flex;gap:6px">
-        <button style="width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:not-allowed;opacity:.5">‹</button>
-        <button style="width:30px;height:30px;border-radius:7px;border:none;background:var(--accent);color:#fff;font-weight:600;cursor:pointer">1</button>
-        <button style="width:30px;height:30px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:not-allowed;opacity:.5">›</button>
-      </div>
+      <span style="font-size:12.5px;color:var(--text-muted)" id="cam-table-count">Showing 1 camera</span>
     </div>
   </div>
 
@@ -131,65 +99,267 @@
 </div>
 </div>
 
+<!-- ══════════════════════════════════════════════
+     FULLSCREEN VIEW MODAL
+══════════════════════════════════════════════ -->
+<div id="cam-fs-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.92);z-index:200;flex-direction:column">
+  <!-- Topbar -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 20px;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="display:flex;align-items:center;gap:6px;background:rgba(239,68,68,.2);border:1px solid rgba(239,68,68,.4);padding:4px 10px;border-radius:7px;color:#ef4444;font-size:11.5px;font-weight:700">
+        <span style="width:7px;height:7px;border-radius:50%;background:#ef4444;animation:recPulse 1.4s infinite"></span>LIVE
+      </span>
+      <span id="fs-cam-label" style="color:#fff;font-weight:600;font-size:14px">Camera #1</span>
+    </div>
+    <div style="display:flex;gap:10px;align-items:center">
+      <button onclick="camOpenRoleModal(0)" style="display:flex;align-items:center;gap:7px;height:34px;padding:0 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg>
+        Set Roles
+      </button>
+      <button onclick="camCloseFs()" style="width:34px;height:34px;border-radius:8px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.07);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+  </div>
+  <!-- Video area -->
+  <div style="flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#000">
+    <img id="fs-frame" src="" style="max-width:100%;max-height:100%;object-fit:contain" alt="">
+    <div id="fs-placeholder" style="display:flex;flex-direction:column;align-items:center;gap:12px;color:rgba(255,255,255,.3)">
+      <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>
+      <span style="font-size:14px">No signal</span>
+    </div>
+  </div>
+  <!-- Bottom info bar -->
+  <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 20px;background:rgba(0,0,0,.5);backdrop-filter:blur(4px);flex-shrink:0">
+    <div style="display:flex;gap:8px;flex-wrap:wrap" id="fs-roles-bar"></div>
+    <span style="font-size:12px;color:rgba(255,255,255,.5)" id="fs-clock">--:--:--</span>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════
+     ROLE ASSIGNMENT MODAL
+══════════════════════════════════════════════ -->
+<div id="cam-role-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:300;align-items:center;justify-content:center">
+  <div style="background:var(--bg-card);border:1px solid var(--border);border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.5);width:440px;max-height:90vh;overflow-y:auto;padding:28px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+      <div>
+        <div style="font-size:17px;font-weight:800;color:var(--text)">Set Detection Roles</div>
+        <div style="font-size:12.5px;color:var(--text-muted);margin-top:2px" id="role-modal-cam-name">Camera #1</div>
+      </div>
+      <button onclick="camCloseRoleModal()" style="width:32px;height:32px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;font-size:18px;line-height:1">×</button>
+    </div>
+
+    <div style="font-size:12px;color:var(--text-muted);margin-bottom:14px;background:var(--bg-card-alt);border-radius:9px;padding:10px 14px">
+      เลือกโมเดลตรวจจับที่ต้องการเปิดใช้สำหรับกล้องนี้ — แต่ละโมดูลจะพัฒนาและเปิดใช้งานแยกกัน
+    </div>
+
+    <!-- Role checkboxes -->
+    <div id="role-checklist" style="display:flex;flex-direction:column;gap:10px;margin-bottom:22px"></div>
+
+    <!-- Actions -->
+    <div style="display:flex;gap:9px;justify-content:flex-end">
+      <button onclick="camCloseRoleModal()" style="height:36px;padding:0 16px;border-radius:9px;border:1px solid var(--border);background:transparent;color:var(--text-sub);font-family:var(--font);font-size:13px;cursor:pointer">Cancel</button>
+      <button onclick="camSaveRoles()" style="height:36px;padding:0 20px;border-radius:9px;border:none;background:var(--accent);color:#fff;font-family:var(--font);font-size:13px;font-weight:600;cursor:pointer">Save Roles</button>
+    </div>
+  </div>
+</div>
+
 <script>
-function init_cameras() {
-  // Update compliance from alert ratio
-  var compliance = 82;
-  var a = ZENTRA.state.alerts || {};
-  if (a.total && a.total > 0) {
-    compliance = Math.max(0, Math.round(100 - (a.total * 3)));
-  }
-  var bar = document.getElementById('cam-compliance-bar');
-  var pct = document.getElementById('cam-compliance-pct');
-  if (bar) bar.style.width = compliance + '%';
-  if (pct) pct.textContent = compliance + '%';
+var _camList = [];
+var _camRoles = {};        // { camId: [roleIds] }
+var _fsCamIdx = 0;
+var _fsTimer  = null;
+var _roleCamIdx = 0;
 
-  // Camera status
+var _rolesCfg = [
+  { id: 'ppe',    label: 'PPE Detection',        desc: 'ตรวจหมวก, เสื้อกัก, ถุงมือ',         color: 'var(--orange)', icon: '🦺', status: 'planned' },
+  { id: 'zone',   label: 'Zone Monitoring',       desc: 'ตรวจบุคคลเข้าพื้นที่อันตราย',         color: 'var(--accent)', icon: '📍', status: 'planned' },
+  { id: 'fall',   label: 'Fall & Heat Detection', desc: 'ตรวจล้ม / ความเหนื่อยล้า MediaPipe', color: 'var(--red)',    icon: '🚨', status: 'planned' },
+  { id: 'crowd',  label: 'Crowd Density',         desc: 'นับจำนวนคนในพื้นที่',                 color: '#8B5CF6',       icon: '👥', status: 'planned' },
+  { id: 'vehicle',label: 'Vehicle Detection',     desc: 'ตรวจยานพาหนะในโซนห้าม',              color: 'var(--text-sub)', icon: '🚛', status: 'planned' },
+];
+
+function camRoleBadge(roleId) {
+  var r = _rolesCfg.find(function(x) { return x.id === roleId; });
+  if (!r) return '';
+  return '<span style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:99px;background:' + r.color + '22;color:' + r.color + ';font-size:11px;font-weight:700;white-space:nowrap">'
+    + r.icon + ' ' + r.label + '</span>';
+}
+
+function camActiveRoleCount() {
+  var n = 0;
+  Object.keys(_camRoles).forEach(function(k) { n += (_camRoles[k] || []).length; });
+  return n;
+}
+
+function camRenderTable() {
+  var body = document.getElementById('cam-table-body');
+  if (!body) return;
   var cam = ZENTRA.state.camera;
-  var badge = document.getElementById('cam-status-badge');
-  if (badge) {
-    if (cam === 'connected') {
-      badge.style.background = 'var(--green-dim)'; badge.style.color = 'var(--green)';
-      badge.innerHTML = '<span style="width:6px;height:6px;border-radius:50%;background:var(--green)"></span>Online';
-      var onEl = document.getElementById('cam-count-online');
-      var offEl = document.getElementById('cam-count-offline');
-      if (onEl) onEl.textContent = '1';
-      if (offEl) offEl.textContent = '0';
-    } else {
-      badge.style.background = 'var(--red-dim)'; badge.style.color = 'var(--red)';
-      badge.innerHTML = '<span style="width:6px;height:6px;border-radius:50%;background:var(--red)"></span>Offline';
-      var onEl2 = document.getElementById('cam-count-online');
-      var offEl2 = document.getElementById('cam-count-offline');
-      if (onEl2) onEl2.textContent = '0';
-      if (offEl2) offEl2.textContent = '1';
-    }
-  }
+  var connected = (cam === 'connected');
 
-  // Source label
-  var src = document.getElementById('cam-row-src');
-  if (src && ZENTRA.state.pipeline && ZENTRA.state.pipeline.source) {
-    src.textContent = ZENTRA.state.pipeline.source;
-  }
+  body.innerHTML = _camList.map(function(c, i) {
+    var roles = _camRoles[c.id] || [];
+    var badgesHtml = roles.length > 0
+      ? roles.map(camRoleBadge).join(' ')
+      : '<span style="font-size:12px;color:var(--text-muted);font-style:italic">No roles assigned</span>';
+    return '<div style="display:grid;grid-template-columns:64px 1fr 1fr 1.8fr 80px 80px;gap:12px;padding:14px 20px;align-items:center;border-bottom:1px solid var(--border)">'
+      + '<div style="width:60px;height:40px;border-radius:7px;background:var(--bg-video);overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3)">'
+      + (ZENTRA._lastFrame && connected
+        ? '<img src="' + ZENTRA._lastFrame + '" style="width:100%;height:100%;object-fit:cover" alt="">'
+        : '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8Z"/><rect width="14" height="12" x="2" y="6" rx="2"/></svg>')
+      + '</div>'
+      + '<div>'
+      + '<div style="font-size:13.5px;font-weight:600;color:var(--text)">' + c.name + '</div>'
+      + '<div style="font-size:11px;color:var(--text-muted);font-family:ui-monospace,monospace;margin-top:2px">' + (c.source || '—') + '</div>'
+      + '</div>'
+      + (connected
+        ? '<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:99px;background:var(--green-dim);color:var(--green);font-size:11.5px;font-weight:700"><span style="width:6px;height:6px;border-radius:50%;background:var(--green)"></span>Online</span>'
+        : '<span style="display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:99px;background:var(--red-dim);color:var(--red);font-size:11.5px;font-weight:700"><span style="width:6px;height:6px;border-radius:50%;background:var(--red)"></span>Offline</span>')
+      + '<div style="display:flex;flex-wrap:wrap;gap:5px">' + badgesHtml + '</div>'
+      + '<div style="text-align:center"><button onclick="camOpenFs(' + i + ')" style="width:34px;height:34px;border-radius:8px;border:1px solid var(--border);background:transparent;color:var(--text-muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center" title="Fullscreen view"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg></button></div>'
+      + '<div style="text-align:center"><button onclick="camOpenRoleModal(' + i + ')" style="width:34px;height:34px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;display:inline-flex;align-items:center;justify-content:center" title="Set roles"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 7h-9"/><path d="M14 17H5"/><circle cx="17" cy="17" r="3"/><circle cx="7" cy="7" r="3"/></svg></button></div>'
+      + '</div>';
+  }).join('');
 
-  // Storage estimate from API
-  fetch('/api/data/stats').then(function(r) { return r.json(); }).then(function(d) {
-    var gb = d.disk_used_gb || d.size_mb ? Math.round((d.size_mb || 0) / 1024 * 10) / 10 : null;
-    if (gb !== null) {
-      var el = document.getElementById('cam-storage');
-      if (el) el.textContent = gb;
-    }
-  }).catch(function() {});
+  var cnt = document.getElementById('cam-table-count');
+  if (cnt) cnt.textContent = 'Showing ' + _camList.length + ' camera' + (_camList.length !== 1 ? 's' : '');
+  var arc = document.getElementById('cam-active-roles');
+  if (arc) arc.textContent = camActiveRoleCount();
+}
 
-  // Thumbnail from last frame
+// ─── Fullscreen ───────────────────────────────────
+function camOpenFs(idx) {
+  _fsCamIdx = idx;
+  var modal = document.getElementById('cam-fs-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  var c = _camList[idx] || { name: 'Camera #1' };
+  var lbl = document.getElementById('fs-cam-label');
+  if (lbl) lbl.textContent = c.name;
+
+  // Show last frame
+  var img = document.getElementById('fs-frame');
+  var ph  = document.getElementById('fs-placeholder');
   if (ZENTRA._lastFrame) {
-    var thumb = document.getElementById('cam-thumb');
-    var ico   = document.getElementById('cam-thumb-ico');
-    if (thumb) { thumb.src = ZENTRA._lastFrame; thumb.style.display = 'block'; }
-    if (ico)   ico.style.display = 'none';
+    if (img) { img.src = ZENTRA._lastFrame; img.style.display = 'block'; }
+    if (ph)  ph.style.display = 'none';
+  } else {
+    if (img) img.style.display = 'none';
+    if (ph)  ph.style.display = 'flex';
   }
 
-  // Date added
-  var dateEl = document.getElementById('cam-row-date');
-  if (dateEl) dateEl.textContent = new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' });
+  // Roles bar
+  var roles = _camRoles[(c.id || 'cam0')] || [];
+  var rb = document.getElementById('fs-roles-bar');
+  if (rb) rb.innerHTML = roles.length > 0
+    ? roles.map(camRoleBadge).join(' ')
+    : '<span style="font-size:12px;color:rgba(255,255,255,.4)">No detection roles assigned — click Set Roles to configure</span>';
+
+  // Live frame updates
+  clearInterval(_fsTimer);
+  _fsTimer = setInterval(function() {
+    if (!document.getElementById('cam-fs-modal')) { clearInterval(_fsTimer); return; }
+    if (ZENTRA._lastFrame) {
+      if (img) { img.src = ZENTRA._lastFrame; img.style.display = 'block'; }
+      if (ph)  ph.style.display = 'none';
+    }
+    var clk = document.getElementById('fs-clock');
+    if (clk) clk.textContent = new Date().toLocaleTimeString('en-GB');
+  }, 200);
+
+  // Prevent body scroll
+  document.body.style.overflow = 'hidden';
+}
+
+function camCloseFs() {
+  clearInterval(_fsTimer);
+  var modal = document.getElementById('cam-fs-modal');
+  if (modal) modal.style.display = 'none';
+  document.body.style.overflow = '';
+}
+
+// ─── Role modal ───────────────────────────────────
+function camOpenRoleModal(idx) {
+  _roleCamIdx = idx;
+  var c = _camList[idx] || { id: 'cam0', name: 'Camera #1' };
+  var modal = document.getElementById('cam-role-modal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+
+  var nm = document.getElementById('role-modal-cam-name');
+  if (nm) nm.textContent = c.name;
+
+  var current = _camRoles[c.id] || [];
+  var cl = document.getElementById('role-checklist');
+  if (!cl) return;
+  cl.innerHTML = _rolesCfg.map(function(r) {
+    var checked = current.indexOf(r.id) !== -1;
+    return '<label style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:10px;background:var(--bg-card-alt);border:1px solid var(--border);cursor:pointer;transition:border-color .15s" '
+      + 'onmouseover="this.style.borderColor=\'' + r.color + '55\'" onmouseout="this.style.borderColor=\'var(--border)\'">'
+      + '<input type="checkbox" id="role-chk-' + r.id + '" ' + (checked ? 'checked' : '') + ' style="width:16px;height:16px;cursor:pointer;margin-top:2px;accent-color:var(--accent)">'
+      + '<div style="flex:1">'
+      + '<div style="display:flex;align-items:center;gap:7px">'
+      + '<span style="font-size:17px">' + r.icon + '</span>'
+      + '<span style="font-size:13.5px;font-weight:700;color:var(--text)">' + r.label + '</span>'
+      + (r.status === 'planned' ? '<span style="padding:2px 7px;border-radius:99px;background:var(--bg-video);color:var(--text-muted);font-size:10px;font-weight:600">PLANNED</span>' : '')
+      + '</div>'
+      + '<div style="font-size:12px;color:var(--text-muted);margin-top:3px">' + r.desc + '</div>'
+      + '</div>'
+      + '</label>';
+  }).join('');
+}
+
+function camCloseRoleModal() {
+  var modal = document.getElementById('cam-role-modal');
+  if (modal) modal.style.display = 'none';
+}
+
+function camSaveRoles() {
+  var c = _camList[_roleCamIdx] || { id: 'cam0' };
+  var selected = _rolesCfg.filter(function(r) {
+    var chk = document.getElementById('role-chk-' + r.id);
+    return chk && chk.checked;
+  }).map(function(r) { return r.id; });
+  _camRoles[c.id] = selected;
+
+  // Persist to settings
+  fetch('/api/settings').then(function(res) { return res.json(); }).then(function(settings) {
+    if (!settings.cameras) settings.cameras = {};
+    settings.cameras[c.id] = { roles: selected };
+    return fetch('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(settings) });
+  }).catch(function() {}).then(function() {
+    camCloseRoleModal();
+    camRenderTable();
+    // Update FS roles bar if open
+    var rb = document.getElementById('fs-roles-bar');
+    if (rb) rb.innerHTML = selected.length > 0
+      ? selected.map(camRoleBadge).join(' ')
+      : '<span style="font-size:12px;color:rgba(255,255,255,.4)">No detection roles assigned</span>';
+  });
+}
+
+// ─── Init ─────────────────────────────────────────
+function init_cameras() {
+  _camList = [{ id: 'cam0', name: 'Camera #1', source: (ZENTRA.state.pipeline && ZENTRA.state.pipeline.source) || '—' }];
+
+  // Load saved roles from settings
+  fetch('/api/settings').then(function(r) { return r.json(); }).then(function(s) {
+    var cams = (s.cameras || {});
+    Object.keys(cams).forEach(function(id) { _camRoles[id] = cams[id].roles || []; });
+    if (!_camRoles['cam0']) _camRoles['cam0'] = [];
+    camRenderTable();
+  }).catch(function() {
+    if (!_camRoles['cam0']) _camRoles['cam0'] = [];
+    camRenderTable();
+  });
+
+  // Camera status cards
+  var cam = ZENTRA.state.camera;
+  var onEl  = document.getElementById('cam-count-online');
+  var offEl = document.getElementById('cam-count-offline');
+  if (cam === 'connected') { if (onEl) onEl.textContent = '1'; if (offEl) offEl.textContent = '0'; }
+  else { if (onEl) onEl.textContent = '0'; if (offEl) offEl.textContent = '1'; }
 }
 </script>

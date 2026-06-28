@@ -3,7 +3,7 @@
    Color palette matched to storyboard screenshots
    ═══════════════════════════════════════════════ */
 
-@import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:ital,opsz,wght@0,17..18,400..700;1,17..18,400..700&family=Kanit:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
 
 /* ─── CSS Variables — Dark "Professional" theme (Protex-style) ──── */
 :root {
@@ -40,7 +40,7 @@
   --shadow:       0 2px 6px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md:    0 8px 24px rgba(0, 0, 0, 0.55);
 
-  --font:         'Sarabun', sans-serif;
+  --font:         'Google Sans', 'Kanit', sans-serif;
   --r:            8px;
   --r-lg:         12px;
   --nav-h:        56px;
