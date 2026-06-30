@@ -19,6 +19,13 @@ _APP_DATA = Path(__file__).parent.parent / "data"
 _APP_DATA.mkdir(exist_ok=True)
 
 
+class _Meta:
+    """Lightweight metadata object expected by modules.ppe.on_data."""
+    __slots__ = ("frame_id",)
+    def __init__(self, fid: int):
+        self.frame_id = fid
+
+
 # ================================================================
 # FRAME READER
 # ================================================================
@@ -76,6 +83,14 @@ class Pipeline:
         self._start_time: Optional[float] = None
         self._flip_override: Optional[bool] = None
 
+        # ── Detection (PPE) state ──
+        self._ppe_enabled    = False
+        self._ppe_client     = None
+        self._ppe_id: Optional[str] = None
+        self._last_ppe_preds: list = []
+        self._line_started   = False
+        self._ui_alert_ts    = 0.0
+
         self.on_alert:  Optional[Callable[[str, str, bool], None]] = None
         self.on_status: Optional[Callable[[dict], None]] = None
 
@@ -114,11 +129,19 @@ class Pipeline:
             self.status["modules"] = {"ppe": "standby", "zone": "standby", "fall": "standby"}
         self._set_camera_state("connected")
 
+        # Bring up PPE detection (inference client + LINE sender). Falls back to
+        # passthrough silently if the inference SDK / model id is unavailable.
+        self._init_detection()
+        if self._ppe_enabled:
+            with self._lock:
+                self.status["modules"]["ppe"] = "active"
+
         self._proc_thr = threading.Thread(
             target=self._process_loop, daemon=True, name="PipelineLoop"
         )
         self._proc_thr.start()
-        print(f"[Pipeline] ✅ Started (passthrough) — {source_config.get('source', 'webcam')}")
+        mode = "PPE detection" if self._ppe_enabled else "passthrough"
+        print(f"[Pipeline] ✅ Started ({mode}) — {source_config.get('source', 'webcam')}")
         return True
 
     def stop(self):
@@ -266,6 +289,103 @@ class Pipeline:
                     slept += 0.2
         return False
 
+    # ── Detection ─────────────────────────────────────────────
+
+    def _init_detection(self):
+        """Set up the Roboflow inference client + LINE background sender.
+        On any failure the pipeline keeps running in passthrough mode."""
+        self._ppe_enabled    = False
+        self._ppe_client     = None
+        self._ppe_id         = None
+        self._last_ppe_preds = []
+        try:
+            import config as cfg
+            import modules.ppe as _ppe   # noqa: F401 (ensures importable)
+            from inference_sdk import InferenceHTTPClient
+
+            ppe_id = (
+                cfg.PPE_LOCAL_MODEL
+                if cfg.USE_LOCAL_MODEL and Path(cfg.PPE_LOCAL_MODEL).exists()
+                else cfg.PPE_MODEL_ID
+            )
+            if not ppe_id:
+                print("[Pipeline] PPE_MODEL_ID empty — detection disabled (passthrough)")
+                return
+
+            self._ppe_client = InferenceHTTPClient(
+                api_url=cfg.INFERENCE_SERVER_URL, api_key=cfg.ROBOFLOW_API_KEY
+            )
+            self._ppe_id     = ppe_id
+            self._ppe_enabled = True
+
+            # Start the LINE background sender once (drains the alert queue).
+            try:
+                from alerts.line_notify import start_sender
+                if not self._line_started:
+                    start_sender()
+                    self._line_started = True
+            except Exception as e:
+                print(f"[Pipeline] LINE sender init: {e}")
+
+            print(f"[Pipeline] 🪖 PPE detection enabled — model {ppe_id}")
+        except Exception as e:
+            print(f"[Pipeline] detection init failed ({e}) — passthrough mode")
+            self._ppe_enabled = False
+
+    def _detect_and_annotate(self, raw: np.ndarray, frame_id: int) -> np.ndarray:
+        """Run PPE inference every Nth frame, draw boxes, fire alerts + collect."""
+        import config as cfg
+        import modules.ppe as ppe
+
+        every = max(1, int(getattr(cfg, "INFER_EVERY_N_FRAMES", 2)))
+        if frame_id % every == 0:
+            try:
+                r = self._ppe_client.infer(raw, model_id=self._ppe_id)
+                self._last_ppe_preds = r.get("predictions", [])
+            except Exception as e:
+                print(f"[Pipeline] inference error: {e}")
+            # LINE alert + auto data collection (ppe handles its own cooldown)
+            try:
+                ppe.on_data({"predictions": self._last_ppe_preds}, _Meta(frame_id), frame=raw)
+            except Exception as e:
+                print(f"[Pipeline] ppe.on_data error: {e}")
+            # UI / history alert (separate debounce)
+            self._handle_ui_alert(self._last_ppe_preds)
+
+        return ppe.draw_predictions(raw.copy(), self._last_ppe_preds)
+
+    def _handle_ui_alert(self, preds: list):
+        """Detect PPE violations and push a debounced alert to the UI."""
+        try:
+            import config as cfg
+            import modules.ppe as ppe
+        except Exception:
+            return
+
+        kept = [p for p in preds if ppe._keep(p)]
+        missing = sorted({
+            cfg.PPE_CLASSES.get(p.get("class", ""), {}).get("label_th", "")
+            for p in kept
+            if cfg.PPE_CLASSES.get(p.get("class", ""), {}).get("violation")
+        } - {""})
+        if not missing:
+            return
+
+        now = time.time()
+        if now - self._ui_alert_ts < float(getattr(cfg, "VIOLATION_COOLDOWN_SECONDS", 30)):
+            return
+        self._ui_alert_ts = now
+
+        msg = "ตรวจพบการไม่สวมอุปกรณ์ PPE: " + ", ".join(missing)
+        with self._lock:
+            self.status["alerts"]["total"]   += 1
+            self.status["alerts"]["warning"] += 1
+        if self.on_alert:
+            try:
+                self.on_alert(msg, "warning", True)
+            except Exception as e:
+                print(f"[Pipeline] on_alert callback: {e}")
+
     def _process_loop(self):
         try:
             try:
@@ -282,7 +402,8 @@ class Pipeline:
 
             frame_id      = 0
             read_failures = 0
-            print("[Pipeline] ▶️  Process loop running (passthrough — no detection)")
+            _mode = "PPE detection" if self._ppe_enabled else "passthrough"
+            print(f"[Pipeline] ▶️  Process loop running ({_mode})")
 
             while not self._stop_evt.is_set() and self._running:
                 ret, raw = (self._reader.read() if self._reader else (False, None))
@@ -301,8 +422,17 @@ class Pipeline:
                 if flip:
                     raw = cv2.flip(raw, 1)
 
+                if self._ppe_enabled:
+                    try:
+                        frame_out = self._detect_and_annotate(raw, frame_id)
+                    except Exception as e:
+                        print(f"[Pipeline] detect error: {e}")
+                        frame_out = raw
+                else:
+                    frame_out = raw
+
                 with self._frame_lock:
-                    self._latest_frame = raw
+                    self._latest_frame = frame_out
 
                 if frame_id % 150 == 0:
                     with self._lock:

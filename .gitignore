@@ -10,3 +10,11 @@ data/reports/
 data/zentra.db
 *.db
 *.log
+
+# ── PPE detection artifacts (models + training frames) ──
+models/*.pt
+*.onnx
+*.engine
+data/**/*.jpg
+data/**/*.jpeg
+data/**/*.png
