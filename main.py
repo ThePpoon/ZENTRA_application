@@ -15,6 +15,15 @@ from pathlib import Path
 if sys.version_info < (3, 10):
     sys.exit("❌ Python 3.10+ required (แนะนำ 3.11)")
 
+# Windows console / redirected output defaults to cp1252, which crashes on the
+# emoji used in log messages (UnicodeEncodeError). Force UTF-8 so logs never
+# bring the app down regardless of where stdout goes.
+for _stream in (sys.stdout, sys.stderr):
+    try:
+        _stream.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
 import config as cfg
 from alerts.line_notify   import start_sender, stop_sender
 from reports.daily_report import get_logger, get_scheduler

@@ -61,7 +61,14 @@ PPE_LOCAL_SENTINEL = "__local__"
 #   {"id": "ppe-tqmos/1", "kind": "server", "label": "...", "note": "..."}
 #   {"id": PPE_LOCAL_SENTINEL, "kind": "local", "label": "โมเดลที่ฉันเทรนเอง (local .pt)", "note": "..."}
 # While empty, PPE detection is paused (the pipeline skips inference gracefully).
-PPE_MODELS: list[dict] = []
+PPE_MODELS: list[dict] = [
+    {"id": "ppe-vum8g/2", "kind": "server",
+     "label": "PPE (Roboflow ppe-vum8g/2)",
+     "note": "hardhat/vest/gloves/boots + no_* + person — ไม่มี class แว่นตา"},
+    {"id": PPE_LOCAL_SENTINEL, "kind": "local",
+     "label": "โมเดลที่ฉันเทรนเอง (local .pt)",
+     "note": "ใช้ models/ppe_finetuned.pt — fine-tune จากข้อมูลที่เก็บเอง"},
+]
 
 ROBOFLOW_PPE_PROJECT  = os.getenv("ROBOFLOW_PPE_PROJECT",  "zentra-ppe")
 ROBOFLOW_FALL_PROJECT = os.getenv("ROBOFLOW_FALL_PROJECT", "zentra-fall")
@@ -141,7 +148,23 @@ PPE_CLASSES: dict[str, dict] = {
     # states register correctly (singular "no glove" + redundant "helmet on").
     "no glove":        {"label": "No Gloves", "label_th": "ไม่สวมถุงมือ",      "color": (0, 0, 220),   "violation": True},
     "helmet on":       {"label": "Helmet",    "label_th": "สวมหมวกนิรภัย",    "color": (0, 210, 0),   "violation": False},
+    # ppe-vum8g/2 emits these class names — "hardhat" == helmet, "no_boots" not
+    # covered by the safety_boots mapping above. Map them so worn/violation
+    # states register with the same labels as the rest of the system.
+    "hardhat":         {"label": "Helmet",    "label_th": "สวมหมวกนิรภัย",    "color": (0, 210, 0),   "violation": False},
+    "no_hardhat":      {"label": "No Helmet", "label_th": "ไม่สวมหมวก",        "color": (0, 0, 220),   "violation": True},
+    "no_boots":        {"label": "No Boots",  "label_th": "ไม่สวมรองเท้าบูท", "color": (0, 0, 220),   "violation": True},
     "person":          {"label": "Person",    "label_th": "บุคคล",              "color": (255, 190, 0), "violation": False},
+    # ppe-vum8g/2 quirk: the runtime class strings differ from the Roboflow UI
+    # labels. WORN items come back prefixed with "a " (a person / a hardhat /
+    # a vest / a gloves / a boots) while VIOLATIONS use underscores (no_hardhat
+    # …). Map the "a " variants so worn/person boxes draw correctly AND get
+    # written into the collected YOLO training labels.
+    "a person":        {"label": "Person",    "label_th": "บุคคล",              "color": (255, 190, 0), "violation": False},
+    "a hardhat":       {"label": "Helmet",    "label_th": "สวมหมวกนิรภัย",    "color": (0, 210, 0),   "violation": False},
+    "a vest":          {"label": "Vest",      "label_th": "สวมเสื้อกั๊ก",      "color": (0, 210, 0),   "violation": False},
+    "a gloves":        {"label": "Gloves",    "label_th": "สวมถุงมือ",          "color": (0, 210, 0),   "violation": False},
+    "a boots":         {"label": "Boots",     "label_th": "สวมรองเท้าบูท",     "color": (0, 210, 0),   "violation": False},
 }
 # NOTE: PPE violation detection does NOT compute "person without helmet" — it
 # relies on the model emitting explicit negative classes (e.g. "no helmet",
